@@ -54,15 +54,6 @@ th{color:var(--mu);font-weight:600;font-size:12px}
 tfoot td{font-weight:700;border-bottom:0}
 .lo{margin-left:auto;border:1px solid var(--bd);background:none;color:var(--mu);border-radius:8px;padding:5px 9px;font:inherit;font-size:13px}
 
-/* Ocultar elementos que no sean la etiqueta al imprimir */
-#print-label-area { display: none; }
-
-@media print {
-  @page { size: 6in 4in landscape; margin: 0; }
-  body > *:not(#print-label-area){ display: none !important; }
-  #print-label-area { display: flex !important; position: absolute; left: 0; top: 0; width: 6in; height: 4in; align-items: center; justify-content: center; }
-}
-
 .label-box { 
   width: 5.6in; 
   height: 3.7in; 
@@ -111,7 +102,7 @@ tfoot td{font-weight:700;border-bottom:0}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script></head>
 <body><div id="app"></div><div id="st" class="mu" style="text-align:center"></div>
 <script>
-var firebaseConfig={apiKey:"",authDomain:"cuentas-little-nani.firebaseapp.com",projectId:"cuentas-little-nani",storageBucket:"cuentas-little-nani.firebasestorage.app",messagingSenderId:"98802163142",appId:"1:98802163142:web:a3f5935ca4f0a137cc66c7"};
+var firebaseConfig={apiKey:"AIzaSyB0kHwMtOSAgqkM4mbHCMwVbfCymuLkD1s",authDomain:"cuentas-little-nani.firebaseapp.com",projectId:"cuentas-little-nani",storageBucket:"cuentas-little-nani.firebasestorage.app",messagingSenderId:"98802163142",appId:"1:98802163142:web:a3f5935ca4f0a137cc66c7"};
 var LOGO='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwQDAwQEBAQFBQQFBwsHBwYGBw4KCggLEA4RERAOEA8SFBoWEhMYEw8QFh8XGBsbHR0dERYgIh8cIhocHRz/2wBDAQUFBQcGBw0HBw0cEhASHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBz/wAARCAB4AHgDASIAAhEBAxEB/8QAHAAAAgIDAQEAAAAAAAAAAAAAAAYEBQEDBwII/8QAPRAAAQMDAQUEBggGAgMAAAAAAQIDBAAFESEGEhMxQSJRYXEHFIGx0eEjMjNCYpGhwRUWF1Jy8DRDY3OS/8QAGgEAAgMBAQAAAAAAAAAAAAAAAgMAAQQFBv/EAC4RAAICAQQAAwcDBQAAAAAAAAABAgMRBBIhMRNRoQUUQWGBwfAiMnEjQpHR4f/aAAwDAQACEQMRAD8A+/qKKKhAorBISCScAakmlu6bTbpU1CwSObpGnsH71BldUrHiKL+RLYiI333UNp/EedUkna2M3owy46e89kfGqOPbZ14c4mFKBOrrp09nyq8i7JxkAGQ4t1XcOyn40cVBfuJbXs4T5Kt7a6YfqNMIHiCf3qP/ADZcc/aM4/w+dNS4FqtrC3nWI7TSBlS3AMD2imaptkS204XoAQ8cIVlGFeVPjdUv7Dnz0uos5jNooGtrpiQN9plY8ARVnF2vjuYD7LjR/uHaHxq0ds0B8duIzr1CcH9KrJWyUZYJjuLaV3HtJ+NHv00+JRwY3Tr6uYTUvk/z7l3GlsS0b7DqHE/hPKt9IEm3TrQ4HO0kA6OtnT5e2rm17T75S1NwCdA6OXtHTzobNLxure5BUe1E5+FqI7Jen5+ZGaisJUFAEHIPUVmsh1gPI0UHkaKFgsKwSEgkkADmTWaWtprngepNK1Iy4R3dBRDqq3ZJRRCvd6VOWWGCRGBxpzX8qmWfZ0YS/NTk80tH9/hRs7ZxhM18ZPNtJ6fipmqjVdcq14VX1ZhKQkAAAAcgKzRRVmEqdo7N/HbU7EDnDcJC0KOo3gcjPhXNIWw10lXJyI81wG0faPnVOD/b/cf9NdhpP2Wuk+btBfosyXxEwnShDZCRhJOUnQd2maJSaN2m11tEJQhjkbGGgwy20kkpQkJBPPQYrZRRQmEwpIUCCAQehpau+zicKfhJweamh18vhTNRTK7ZVvMWZ9Rpq9RHbYv+CfZbuuCoMvEmOTjXmj5U3hQUAQcg9RS/fLUNZbKdf+xI6+Ne7BOVj1Vw8tUE93dT7oxsj4sPqJN';
 var S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[]},ready=false,authOk=false,tab='r',pend=null,ed=null,DB=null,AUTH=null,FS=null,U=null,ROL=null,rolOk=false,UN=[],RO=false,sed=false,edAh=null,Q={q:'',t:'',c:'',a:'',b:'',f:'',h:'',currentMonth:false};
 var CR_Q='';
@@ -121,7 +112,7 @@ var DV_Q='';
 var DV_SEARCH_Q='';
 var DV_Limit=20;
 var DV_Today=false;
-var CR_Limit=50; // Límite inicial de apartados
+var CR_Limit=50;
 var CATS=['Gasolina','Comida','Servicios Publicos','Pago Casa','Publicidad','Envíos','Ahorro Casa','Ahorro Viaje','Ahorro Niños','Entretenimiento','Otros'];
 var $=function(i){return document.getElementById(i)};
 var pad=function(n){return(n<10?'0':'')+n};
@@ -541,6 +532,58 @@ function tf(l){
   var pk=Object.keys(ps),rg=Q.f&&Q.h?shDot(Q.f)+' – '+shDot(Q.h):Q.f?'desde '+shDot(Q.f):Q.h?'hasta '+shDot(Q.h):'todas las fechas';
   return '<div class="grid"><div class="k bal"><span>Total '+(pk.length===1?'de '+esc(ps[pk[0]]):'de facturas')+' · '+rg+'</span><b>'+money(e+n)+'</b></div><div class="k"><span>Electrónicas</span><b>'+money(e)+'</b></div><div class="k"><span>No electrónicas</span><b>'+money(n)+'</b></div></div>';
 }
+
+function expReporteProveedoresCSV(){
+  var jd=String(Q.j||'').replace(/\D/g,''),qq=Q.q.trim().toLowerCase(),a=parseFloat(String(Q.a).replace(',','.')),b=parseFloat(String(Q.b).replace(',','.'));
+  var l=S.items.filter(function(i){return (!Q.t||i.t===Q.t)&&(!Q.c||i.c===Q.c)&&(!qq||(i.t==='f'&&(i.n||'').trim().toLowerCase()===qq))&&(isNaN(a)||i.a>=a)&&(isNaN(b)||i.a<=b)&&(!Q.f||i.d>=Q.f)&&(!Q.h||i.d<=Q.h)&&(!jd||String(i.j||'').replace(/\D/g,'')===jd)});
+  
+  var facturasFiltradas = l.filter(function(i){ return i.t === 'f'; });
+  var provMap = {};
+
+  facturasFiltradas.forEach(function(f){
+    var provName = (f.n || '').trim() || 'Sin proveedor';
+    var cedula = (f.j || '').trim();
+    if(!provMap[provName]){
+      provMap[provName] = { elec: 0, noElec: 0, cedula: cedula };
+    } else if(!provMap[provName].cedula && cedula) {
+      provMap[provName].cedula = cedula;
+    }
+    if(f.e){
+      provMap[provName].elec += f.a;
+    } else {
+      provMap[provName].noElec += f.a;
+    }
+  });
+
+  var qEsc=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"'};
+  var rows = [['Proveedor', 'Cédula Jurídica', 'Total Facturas Electrónicas', 'Total Facturas No Electrónicas', 'Total General']];
+  
+  Object.keys(provMap).sort().forEach(function(prov){
+    var item = provMap[prov];
+    var totalProv = item.elec + item.noElec;
+    rows.push([prov, item.cedula, item.elec, item.noElec, totalProv]);
+  });
+
+  var b = new Blob(['\ufeff'+rows.map(function(r){return r.map(qEsc).join(',')}).join('\n')],{type:'text/csv;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  a.download = 'reporte-facturas-proveedores-'+shDot(today()).replace(/\//g,'-')+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+}
+
+function imprimirReporteProveedores(){
+  var el = $('reporte_proveedores_card');
+  if(!el) return;
+  var w = window.open('', '_blank');
+  w.document.write('<html><head><title>Reporte de Facturas por Proveedor · Little Nani</title><style>body{font-family:sans-serif;padding:20px;color:#000;background:#fff}.card{border:1px solid #ccc;border-radius:8px;padding:16px;margin-bottom:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}button{display:none!important}b{font-weight:700}.mu{color:#666;font-size:12px}</style></head><body>');
+  w.document.write(el.innerHTML);
+  w.document.write('</body></html>');
+  w.document.close();
+  w.focus();
+  setTimeout(function(){ w.print(); w.close(); }, 250);
+}
+
 function sres(){
   var jd=String(Q.j||'').replace(/\D/g,''),qq=Q.q.trim().toLowerCase(),a=parseFloat(String(Q.a).replace(',','.')),b=parseFloat(String(Q.b).replace(',','.'));
   var l=S.items.filter(function(i){return (!Q.t||i.t===Q.t)&&(!Q.c||i.c===Q.c)&&(!qq||(i.t==='f'&&(i.n||'').trim().toLowerCase()===qq))&&(isNaN(a)||i.a>=a)&&(isNaN(b)||i.a<=b)&&(!Q.f||i.d>=Q.f)&&(!Q.h||i.d<=Q.h)&&(!jd||String(i.j||'').replace(/\D/g,'')===jd)}).sort(function(x,y){return x.d<y.d?1:-1});
@@ -556,6 +599,57 @@ function sres(){
       +'<div class="k bal"><span>Gastos</span><b>'+money(r.g)+'</b></div>'
       +'</div>';
   }
+
+  var facturasFiltradas = l.filter(function(i){ return i.t === 'f'; });
+  var provElectronicas = {};
+  var provNoElectronicas = {};
+  var provCedulas = {};
+  var totalElecGen = 0;
+  var totalNoElecGen = 0;
+
+  facturasFiltradas.forEach(function(f){
+    var provName = (f.n || '').trim() || 'Sin proveedor';
+    var cedula = (f.j || '').trim();
+    if(cedula) provCedulas[provName] = cedula;
+
+    if(f.e){
+      provElectronicas[provName] = (provElectronicas[provName] || 0) + f.a;
+      totalElecGen += f.a;
+    } else {
+      provNoElectronicas[provName] = (provNoElectronicas[provName] || 0) + f.a;
+      totalNoElecGen += f.a;
+    }
+  });
+
+  var keysElec = Object.keys(provElectronicas).sort();
+  var keysNoElec = Object.keys(provNoElectronicas).sort();
+  var rangoFechasTexto = (Q.f && Q.h) ? (shDot(Q.f) + ' al ' + shDot(Q.h)) : (Q.f ? ('Desde ' + shDot(Q.f)) : (Q.h ? ('Hasta ' + shDot(Q.h)) : 'Todas las fechas'));
+
+  h += '<div class="print-report-container">'
+    + '<div id="reporte_proveedores_card" class="card" style="margin-top:16px; border: 2px solid var(--ac);">'
+    + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px">'
+    + '<div><h2 style="margin:0">Reporte de Facturas por Proveedor</h2><small class="mu">Rango: ' + rangoFechasTexto + '</small></div>'
+    + '<div style="display:flex; gap:6px">'
+    + '<button class="pri" style="width:auto; padding:8px 14px; background:var(--ac)" onclick="expReporteProveedoresCSV()">📥 Descargar Excel (CSV)</button>'
+    + '<button class="pri" style="width:auto; padding:8px 14px; background:var(--ac)" onclick="imprimirReporteProveedores()">🖨️ Imprimir Reporte</button>'
+    + '</div>'
+    + '</div>'
+    + '<div class="grid">'
+    + '<div class="card" style="margin:0"><b>Facturas Electrónicas</b><div style="margin-top:8px">'
+    + (keysElec.length ? keysElec.map(function(p){ 
+        var ced = provCedulas[p] ? ' <small class="mu">(Céd: ' + esc(provCedulas[p]) + ')</small>' : '';
+        return '<div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0; border-bottom:1px solid var(--bd)"><span>'+esc(p)+ced+'</span><b>'+money(provElectronicas[p])+'</b></div>'; 
+      }).join('') : '<p class="mu">Sin registros</p>')
+    + '</div><div style="margin-top:8px; text-align:right; font-size:14px">Total Electrónicas: <b class="pos">'+money(totalElecGen)+'</b></div></div>'
+    + '<div class="card" style="margin:0"><b>Facturas No Electrónicas</b><div style="margin-top:8px">'
+    + (keysNoElec.length ? keysNoElec.map(function(p){ 
+        var ced = provCedulas[p] ? ' <small class="mu">(Céd: ' + esc(provCedulas[p]) + ')</small>' : '';
+        return '<div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0; border-bottom:1px solid var(--bd)"><span>'+esc(p)+ced+'</span><b>'+money(provNoElectronicas[p])+'</b></div>'; 
+      }).join('') : '<p class="mu">Sin registros</p>')
+    + '</div><div style="margin-top:8px; text-align:right; font-size:14px">Total No Electrónicas: <b class="neg">'+money(totalNoElecGen)+'</b></div></div>'
+    + '</div>'
+    + '</div>'
+    + '</div>';
   
   h+='<div class="card" style="margin-top:8px">';
   if(!l.length)h+='<p class="mu" style="margin:4px 0">Sin resultados.</p>';
@@ -753,7 +847,7 @@ function enviarReporteCliente(id){
 
 function filterCreditos(el){
   CR_Q = el.value.trim().toLowerCase();
-  CR_Limit = 50; // Reiniciar límite al buscar
+  CR_Limit = 50;
   var container = $('creditos_list_container');
   if(container) container.innerHTML = renderCreditosList();
 }
@@ -765,7 +859,6 @@ function cargarMasCreditos(){
 }
 
 function renderCreditosList(){
-  // Ordenar apartados por número de apartado de forma numérica y ascendente
   var sortedCreditos = S.creditos.slice().sort(function(a, b){
     var numA = parseInt(String(a.num || '').replace(/\D/g, '')) || 0;
     var numB = parseInt(String(b.num || '').replace(/\D/g, '')) || 0;
@@ -834,7 +927,6 @@ function creditosSection(){
 
   var edObj = edCrId ? S.creditos.find(function(c){ return c.id === edCrId; }) : null;
 
-  // Calcular el siguiente número de apartado sugerido si es un nuevo registro
   var sugeridoNum = '';
   if(!edObj && S.creditos.length > 0){
     var maxNum = 0;
@@ -867,8 +959,8 @@ function creditosSection(){
         + '<input id="cr_desc" placeholder="Descripción de la compra (ej: Ropa, zapatos...)" value="'+(edObj ? esc(edObj.desc||'') : '')+'">'
         + '<div class="row">'
         + '<input type="date" id="cr_fecha" value="'+(edObj ? edObj.fecha : today())+'">'
-        + '<input type="number" id="cr_monto" inputmode="decimal" step="0.01" min="0" placeholder="Monto total de compra" value="'+(edObj ? edObj.monto : '')+'">'
-        + '<input type="number" id="cr_pagado" inputmode="decimal" step="0.01" min="0" placeholder="Abono inicial (adelanto)" value="'+(edObj ? esc(edObj.pagado||''):'')+'">'
+        + '<input id="cr_monto" inputmode="decimal" step="0.01" min="0" placeholder="Monto total de compra" value="'+(edObj ? edObj.monto : '')+'">'
+        + '<input id="cr_pagado" inputmode="decimal" step="0.01" min="0" placeholder="Abono inicial (adelanto)" value="'+(edObj ? esc(edObj.pagado||''):'')+'">'
         + '</div>'
         + '<button class="pri" onclick="saveCreditoItem()">'+(edObj ? 'Guardar Cambios' : 'Registrar Apartado')+'</button>'
         + (edObj ? '<button class="pri" style="margin-top:8px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="cancelEditCredito()">Cancelar</button>' : '')
