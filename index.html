@@ -749,7 +749,7 @@ function ahorrosSection(){
 
 function ventaAbono(c,monto,fecha){
   return {id:'ab-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:'v',d:fecha,
-    n:'Abono apartado'+(c.num?' #'+c.num:'')+' · '+c.nombre,a:Math.round(monto*100)/100,ap:c.id};
+    n:'Abono apartado'+(c.num?' #'+c.num:'')+' · '+c.nombre,a:Math.round(monto*100)/100,ap:c.id,cl:c.nombre};
 }
 function saveCreditoItem(){
   var num = $('cr_num').value.trim();
@@ -1351,12 +1351,13 @@ function cargarMasVentas(){
   if(container) container.innerHTML = renderDetallesVentasList();
 }
 
+function abonoNombre(i){return i.cl||String(i.n||'').split(' · ').slice(1).join(' · ')||String(i.n||'Abono')}
 function renderDetallesVentasList(){
   var ventasDetalladas = S.items.filter(function(i){ 
-    if(i.t !== 'v' || !i.dvMeta) return false;
+    if(i.t !== 'v' || !(i.dvMeta || i.ap)) return false;
     if(DV_Q && i.d !== DV_Q) return false;
     if(DV_SEARCH_Q){
-      var v = i.dvMeta;
+      var v = i.dvMeta || {nombre: abonoNombre(i)};
       var matchNombre = (v.nombre || '').toLowerCase().indexOf(DV_SEARCH_Q) >= 0;
       var matchTel = (v.tel || '').toLowerCase().indexOf(DV_SEARCH_Q) >= 0;
       var matchGuia = (v.guia || '').toLowerCase().indexOf(DV_SEARCH_Q) >= 0;
@@ -1373,6 +1374,11 @@ function renderDetallesVentasList(){
   var paginated = sorted.slice(0, DV_Limit);
 
   var html = paginated.map(function(item){
+    if(!item.dvMeta){
+      var mn = String(item.n||'').match(/#(\S+)/);
+      return '<div class="card"><b>'+esc(abonoNombre(item))+'</b> <span class="bd ok">₡'+money(item.a)+'</span>'
+        +'<small class="mu">Fecha: '+shDot(item.d)+' · Abono de apartado'+(mn?' #'+esc(mn[1]):'')+'</small></div>';
+    }
     var v = item.dvMeta;
     var artsStr = (v.articulos || []).map(function(a){ return a.desc + ' (₡' + money(a.precio) + ')'; }).join(', ');
     var tieneGuia = v.guia && v.guia.trim() !== '';
@@ -1403,7 +1409,7 @@ function renderDetallesVentasList(){
 }
 
 function detallesVentasSection(){
-  var ventasTodas = S.items.filter(function(i){ return i.t === 'v' && i.dvMeta; });
+  var ventasTodas = S.items.filter(function(i){ return i.t === 'v' && (i.dvMeta || i.ap); });
   var totalVentasDetalladas = ventasTodas.reduce(function(acc, v){ return acc + (v.a || 0); }, 0);
   var edObj = edDvId ? S.items.filter(function(i){ return i.id === edDvId; })[0] : null;
 
