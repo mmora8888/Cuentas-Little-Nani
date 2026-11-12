@@ -1655,15 +1655,17 @@ function summary(wi){
 
   var globalCards=function(r,x){
     x=x||0;
-    var balanceReal = r.b + x;
-    var balanceProyectado = balanceReal + totalApartadosPendientes;
+    var porPagar = cxTot(cxPendList()).s;
+    var balanceReal = r.b + x + porPagar;
+    var balanceProyectado = balanceReal - porPagar + totalApartadosPendientes;
     return '<div class="grid">'
       + '<div class="k"><span>Ventas</span><b>'+money(r.v)+'</b></div>'
       + '<div class="k"><span>Facturas</span><b>'+money(r.f)+'</b></div>'
       + '<div class="k"><span>Gastos</span><b>'+money(r.g)+'</b></div>'
       + '<div class="k"><span>Total por Cobrar (Pendiente)</span><b class="neg">'+money(totalApartadosPendientes)+'</b></div>'
-      + '<div class="k bal"><span>Balance global</span><b class="'+cls(balanceReal)+'">'+money(balanceReal)+'</b></div>'
-      + '<div class="k bal"><span>Balance global proyectado (Tomando en cuenta apartados)</span><b class="'+cls(balanceProyectado)+'">'+money(balanceProyectado)+'</b></div>'
+      + '<div class="k"><span>Total por Pagar (Facturas pendientes)</span><b class="neg">'+money(porPagar)+'</b></div>'
+      + '<div class="k bal"><span>Balance global real (solo lo pagado)</span><b class="'+cls(balanceReal)+'">'+money(balanceReal)+'</b></div>'
+      + '<div class="k bal"><span>Balance global proyectado (tomando en cuenta apartados y facturas por pagar)</span><b class="'+cls(balanceProyectado)+'">'+money(balanceProyectado)+'</b></div>'
       + '</div>';
   };
 
