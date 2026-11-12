@@ -1628,7 +1628,9 @@ function detallesVentasSection(){
     dvArticulosTemp = JSON.parse(JSON.stringify(edObj.dvMeta.articulos || []));
   }
 
-  var h = '<div class="grid">'
+  var ctAb=(S.cotizaciones||[]).filter(function(c){return c.estado!=='convertida'}).length;
+  var h = '<button type="button" class="pri" style="margin-bottom:10px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="go(\'ct\')">📝 Cotizaciones'+(ctAb?' ('+ctAb+' abierta'+(ctAb===1?'':'s')+')':'')+'</button>'
+        + '<div class="grid">'
         + '<div class="k bal"><span>Total Ventas Registradas (Detalladas)</span><b class="pos">'+money(totalVentasDetalladas)+'</b></div>'
         + '</div>'
         + '<h2>'+(edObj ? 'Editar venta detallada' : 'Registrar nueva venta')+'</h2>'
@@ -1715,7 +1717,7 @@ function summary(wi){
   var ws={};S.items.filter(function(i){return i&&i.d}).forEach(function(i){var w=wk(i.d);(ws[w]=ws[w]||[]).push(i)});
   var keys=Object.keys(ws).sort().reverse();
   h+=chart(ws,keys)+'<h2>Semana por semana</h2>';
-  if(!keys.length)return h+'<p class="mu">Aún no hay movimientos. Empieza en Det. Ventas, Facturas o Gastos.</p><h2>Balance global</h2>'+globalCards(g,S.saldo||0)+saldoBox();
+  if(!keys.length)return h+'<p class="mu">Aún no hay movimientos. Empieza en Ventas, Facturas o Gastos.</p><h2>Balance global</h2>'+globalCards(g,S.saldo||0)+saldoBox();
   h+='<div class="card sc"><table><thead><tr><th>Semana</th><th>Ventas</th><th>Fact.</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>';
   keys.forEach(function(w){var r=sum(ws[w]);h+='<tr><td>'+wl(w)+'</td><td>'+money(r.v)+'</td><td>'+money(r.f)+'</td><td>'+money(r.g)+'</td><td class="'+cls(r.b)+'">'+money(r.b)+'</td></tr>'});
   h+='</tbody></table></div><h2>Mes por mes</h2><div class="card sc"><table><thead><tr><th>Mes</th><th>Ventas</th><th>Fact.</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>';var MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],ms={};S.items.filter(function(i){return i&&i.d}).forEach(function(i){var m=i.d.slice(0,7);(ms[m]=ms[m]||[]).push(i)});Object.keys(ms).sort().reverse().forEach(function(m){var r=sum(ms[m]);h+='<tr><td>'+MN[+m.slice(5)-1]+' '+m.slice(0,4)+'</td><td>'+money(r.v)+'</td><td>'+money(r.f)+'</td><td>'+money(r.g)+'</td><td class="'+cls(r.b)+'">'+money(r.b)+'</td></tr>'});h+='</tbody></table></div><h2>Balance global</h2>'+globalCards(g,S.saldo||0)+saldoBox()+'<p class="mu">'+fx(S.items)+'</p>'+cat()+'<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="pri" style="flex:1" onclick="exp()">Exportar a CSV</button><button type="button" class="pri" style="flex:1;background:var(--ac)" onclick="expJSON()">📥 Descargar Backup JSON</button></div>'
@@ -2005,7 +2007,7 @@ function cotizacionesSection(){
   var ab=L.filter(function(c){return c.estado!=='convertida'});
   var tot=ab.reduce(function(x,c){return x+(c.total||0)},0);
   var bs='border:1px solid var(--bd);background:none;color:var(--tx);border-radius:8px;padding:4px 8px;font-size:12px';
-  var h='<div class="grid"><div class="k bal"><span>Cotizaciones abiertas ('+ab.length+')</span><b>'+money(tot)+'</b></div></div>';
+  var h='<button type="button" class="pri" style="margin-bottom:10px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="go(\'dv\')">← Volver a Ventas</button><div class="grid"><div class="k bal"><span>Cotizaciones abiertas ('+ab.length+')</span><b>'+money(tot)+'</b></div></div>';
   if(RO){h+='<p class="mu">Solo lectura: tu acceso no permite crear ni modificar cotizaciones.</p>'}
   else{
     h+='<h2>'+(E?'Editar cotización':'Nueva cotización')+'</h2><div class="card">'
@@ -2187,8 +2189,8 @@ function render(){
   if(!C){root.className='';root.innerHTML=gateView();return}
   if(!ready){root.innerHTML='<p class="mu">Cargando…</p>';return}
   var wi=S.items.filter(function(i){return i&&i.d&&wk(i.d)===W});
-  var tabsConfig=[['r','Resumen'],['dv','Det. Ventas'],['ct','Cotizaciones'],['f','Facturas'],['cx','Cuentas x Pagar'],['g','Gastos'],['ah','Ahorros'],['cr','Apartados'],['b','Reportes']];
-  var h='<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Cuentas del negocio</span></div><button class="lo" onclick="out()">Salir</button></div><div class="tabs">'+tabsConfig.map(function(p){return '<button class="'+(tab===p[0]?'on':'')+'" onclick="go(\''+p[0]+'\')">'+p[1]+'</button>'}).join('')+'</div>';
+  var tabsConfig=[['r','Resumen'],['dv','Ventas'],['f','Facturas'],['cx','Cuentas x Pagar'],['g','Gastos'],['ah','Ahorros'],['cr','Apartados'],['b','Reportes']];
+  var h='<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Cuentas del negocio</span></div><button class="lo" onclick="out()">Salir</button></div><div class="tabs">'+tabsConfig.map(function(p){return '<button class="'+(tab===p[0]||(p[0]==='dv'&&tab==='ct')?'on':'')+'" onclick="go(\''+p[0]+'\')">'+p[1]+'</button>'}).join('')+'</div>';
   if(tab!=='b'&&tab!=='ah'&&tab!=='cr'&&tab!=='dv'&&tab!=='ct'&&tab!=='cx')h+='<div class="wk"><button onclick="mv(-1)" aria-label="Semana anterior">‹</button><div><b>'+wl(W)+'</b><span class="mu">'+(W===wk(today())?'Esta semana':'&nbsp;')+'</span></div><button onclick="mv(1)" aria-label="Semana siguiente">›</button></div>';
   h+=tab==='r'?summary(wi):tab==='b'?search():tab==='ah'?ahorrosSection():tab==='cr'?creditosSection():tab==='dv'?detallesVentasSection():tab==='ct'?cotizacionesSection():tab==='cx'?cxSection():section(tab,wi);
   root.className=RO?'ro':'';root.innerHTML=h;
