@@ -54,52 +54,25 @@ th{color:var(--mu);font-weight:600;font-size:12px}
 tfoot td{font-weight:700;border-bottom:0}
 .lo{margin-left:auto;border:1px solid var(--bd);background:none;color:var(--mu);border-radius:8px;padding:5px 9px;font:inherit;font-size:13px}
 
-.label-box { 
-  width: 5.6in; 
-  height: 3.7in; 
-  border: 2px solid #000; 
-  padding: 12px 20px; 
-  border-radius: 6px; 
-  background: #fff; 
-  color: #000; 
-  font-family: Arial, sans-serif;
-  box-sizing: border-box;
-  position: relative;
-}
-.sender-container {
-  position: absolute;
-  top: 15px;
-  left: 20px;
-}
-.sender-title {
-  font-weight: bold;
-  font-size: 11px;
-  margin-bottom: 2px;
-}
-.sender-box {
-  border: 1.5px solid #000;
-  padding: 6px 8px;
-  width: 240px;
-  font-size: 10px;
-  line-height: 1.2;
-}
-.dest-title {
-  font-weight: bold;
-  font-size: 18px;
-  text-align: center;
-  margin-bottom: 6px;
-}
-.dest-container {
-  position: absolute;
-  bottom: 15px;
-  left: 20px;
-  right: 20px;
-  font-size: 17px;
-  line-height: 1.4;
-}
+.lb-page{width:6in;height:4in;padding:.1in;overflow:hidden;break-inside:avoid;page-break-inside:avoid;background:#fff}
+.label-box{width:100%;height:100%;border:2px solid #000;padding:12px 20px;border-radius:6px;background:#fff;color:#000;font-family:Arial,sans-serif;box-sizing:border-box;position:relative;overflow:hidden}
+.sender-container{position:absolute;top:12px;left:16px}
+.sender-title{font-weight:bold;font-size:11px;margin-bottom:2px}
+.sender-box{border:1.5px solid #000;padding:6px 8px;width:240px;font-size:10px;line-height:1.2}
+.dest-title{font-weight:bold;font-size:18px;text-align:center;margin-bottom:6px}
+.dest-container{position:absolute;bottom:12px;left:16px;right:16px;font-size:17px;line-height:1.35}
+.dest-container.m{font-size:14px}.dest-container.s{font-size:12px}
+.lbm{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;display:flex;align-items:flex-end;justify-content:center}
+.lbm>div{background:var(--card);color:var(--tx);width:100%;max-width:720px;max-height:90vh;display:flex;flex-direction:column;border-radius:14px 14px 0 0;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+.lbm .ls{overflow-y:auto;flex:1;min-height:80px;margin:6px 0}
+.lbm .it{cursor:pointer}
+.lbm .it input{width:auto;margin:0;flex:none;transform:scale(1.25)}
+.lbm .bt{display:flex;gap:8px;flex-wrap:wrap}
+.lbm .bt button{flex:1;min-width:130px}
+.lbm .sec{background:none;color:var(--tx);border:1px solid var(--bd)}
 #print-label-area{display:none}
 @page{margin:10mm}
-@media print{.label-box:not(:last-child){break-after:page;page-break-after:always}body>*:not(#print-label-area){display:none!important}#print-label-area{display:block!important}body{background:#fff}}
+@media print{html,body{margin:0;padding:0;background:#fff}.lb-page:not(:last-child){break-after:page;page-break-after:always}body>*:not(#print-label-area){display:none!important}#print-label-area{display:block!important}}
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script></head>
@@ -1330,7 +1303,9 @@ function enviarGuiaWhatsApp(id){
 }
 
 function etiquetaHTML(v){
-  return '<div class="label-box">'
+  var largo=String((v.otrosDatos||'')+(v.provincia||'')+(v.canton||'')+(v.distrito||'')+(v.nombre||'')).length;
+  var cls=largo>230?'s':largo>130?'m':'';
+  return '<div class="lb-page"><div class="label-box">'
     + '<div class="sender-container">'
     + '<div class="sender-title">Remitente</div>'
     + '<div class="sender-box">'
@@ -1341,52 +1316,141 @@ function etiquetaHTML(v){
     + 'Tel: 8633-5721'
     + '</div>'
     + '</div>'
-    + '<div class="dest-container">'
+    + '<div class="dest-container '+cls+'">'
     + '<div class="dest-title">Destinatario:</div>'
     + '<b>Nombre:</b> ' + esc(v.nombre || '') + '<br>'
     + '<b>Teléfono:</b> ' + esc(v.tel || 'N/D') + '<br>'
     + esc([v.provincia, v.canton, v.distrito].filter(Boolean).join(', ')) + '<br>'
     + '<b>Dirección:</b> ' + esc(v.otrosDatos || '')
     + '</div>'
-    + '</div>';
+    + '</div></div>';
+}
+function imprimirEtiquetasHTML(html){
+  var la=$('print-label-area');
+  if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
+  la.innerHTML=html;
+  var old=$('lb_page_style');if(old)old.remove();
+  var st=document.createElement('style');st.id='lb_page_style';
+  st.textContent='@page{size:6in 4in;margin:0}';
+  document.head.appendChild(st);
+  var fin=function(){window.removeEventListener('afterprint',fin);var x=$('lb_page_style');if(x)x.remove()};
+  window.addEventListener('afterprint',fin);
+  window.print();
 }
 function imprimirEtiquetaEnvio(id){
   var item = S.items.filter(function(i){ return i.id === id; })[0];
   if(!item || !item.dvMeta) return;
-  var v = item.dvMeta;
-  
-  var labelArea = $('print-label-area');
-  if(!labelArea){
-    labelArea = document.createElement('div');
-    labelArea.id = 'print-label-area';
-    document.body.appendChild(labelArea);
-  }
-  
-  labelArea.innerHTML = etiquetaHTML(v);
-    
-  window.print();
+  imprimirEtiquetasHTML(etiquetaHTML(item.dvMeta));
 }
 
-function sinGuiaDelDia(){
+var LB_ConGuia=false,LB_L=[],LB_Sel={};
+function ventasEnvioDelDia(){
   var dia=DV_Q||today();
-  return {dia:dia,l:S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&i.d===dia&&!String(i.dvMeta.guia||'').trim()})};
+  return {dia:dia,l:S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&i.d===dia}).sort(function(a,b){return a.id<b.id?-1:1})};
+}
+function sinGuiaDelDia(){
+  var r=ventasEnvioDelDia();
+  return {dia:r.dia,l:r.l.filter(function(i){return !String(i.dvMeta.guia||'').trim()})};
 }
 function loteBtn(){
-  var r=sinGuiaDelDia(),b;
+  var r=ventasEnvioDelDia(),sg=sinGuiaDelDia().l.length,b;
   var pc=S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&String(i.dvMeta.guia||'').trim()&&!i.dvMeta.guiaEnviada}).length;
-  if(!r.l.length)b='<p class="mu" style="margin:6px 0">Sin ventas pendientes de guía el '+shDot(r.dia)+'.</p>';
-  else b='<button type="button" class="pri" style="background:var(--ac);margin:6px 0" onclick="imprimirEtiquetasLote()">🖨️ Imprimir etiquetas sin guía ('+r.l.length+') · '+shDot(r.dia)+'</button>';
+  if(!r.l.length)b='<p class="mu" style="margin:6px 0">Sin ventas con datos de envío el '+shDot(r.dia)+'.</p>';
+  else b='<button type="button" class="pri" style="background:var(--ac);margin:6px 0" onclick="lbAbrir()">🖨️ Etiquetas del día: imprimir / descargar ('+sg+' sin guía) · '+shDot(r.dia)+'</button>';
   return b+'<label class="chk"><input type="checkbox" '+(DV_Pend?'checked':'')+' onchange="toggleDvPend(this)"> Solo guías por avisar al cliente ('+pc+')</label>';
 }
 function refreshLote(){var c=$('dv_lote');if(c)c.innerHTML=loteBtn()}
-function imprimirEtiquetasLote(){
-  var r=sinGuiaDelDia();
-  if(!r.l.length){$('st').textContent='No hay ventas sin guía el '+shDot(r.dia);return}
-  if(!confirm('Se imprimirán '+r.l.length+' etiqueta(s) de las ventas del '+shDot(r.dia)+' que aún no tienen guía. ¿Continuar?'))return;
-  var la=$('print-label-area');
-  if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
-  la.innerHTML=r.l.sort(function(a,b){return a.id<b.id?-1:1}).map(function(i){return etiquetaHTML(i.dvMeta)}).join('');
-  window.print();
+function lbAbrir(){
+  var r=ventasEnvioDelDia();
+  if(!r.l.length){$('st').textContent='No hay ventas con datos de envío el '+shDot(r.dia);return}
+  LB_ConGuia=!sinGuiaDelDia().l.length;
+  lbArmar(true);
+}
+function lbArmar(todas){
+  var r=ventasEnvioDelDia();
+  LB_L=r.l.filter(function(i){return LB_ConGuia||!String(i.dvMeta.guia||'').trim()});
+  var prev=LB_Sel;LB_Sel={};
+  LB_L.forEach(function(i){LB_Sel[i.id]=todas?true:(prev[i.id]!==false)});
+  var m=$('lb_modal');if(!m){m=document.createElement('div');m.id='lb_modal';m.className='lbm';document.body.appendChild(m)}
+  m.onclick=function(e){if(e.target===m)lbCerrar()};
+  var h='<div><b style="font-size:17px">Etiquetas del '+shDot(r.dia)+'</b><span class="mu">Desmarca las que no quieras imprimir o descargar.</span>'
+    +'<label class="chk" style="margin:8px 0 0"><input type="checkbox" '+(LB_ConGuia?'checked':'')+' onchange="LB_ConGuia=this.checked;lbArmar(false)"> Incluir ventas que ya tienen guía</label>'
+    +'<div class="ls">';
+  if(!LB_L.length)h+='<p class="mu">No hay ventas para mostrar.</p>';
+  LB_L.forEach(function(i,k){
+    var v=i.dvMeta;
+    h+='<label class="it"><input type="checkbox" '+(LB_Sel[i.id]?'checked':'')+' onchange="lbTog('+k+',this.checked)"><div class="t"><b>'+esc(v.nombre||'Sin nombre')+'</b><small>'+esc([v.provincia,v.canton,v.distrito].filter(Boolean).join(', '))+(String(v.guia||'').trim()?' · Guía: '+esc(v.guia):' · Sin guía')+'</small></div></label>';
+  });
+  h+='</div><div class="bt" style="margin-bottom:8px"><button type="button" class="pri sec" onclick="lbTodas(true)">Marcar todas</button><button type="button" class="pri sec" onclick="lbTodas(false)">Desmarcar todas</button></div>'
+    +'<div class="bt"><button type="button" class="pri" onclick="lbImprimir()">🖨️ Imprimir (<span class="lbn">0</span>)</button><button type="button" class="pri" onclick="lbPDF()">⬇️ Descargar PDF (<span class="lbn">0</span>)</button><button type="button" class="pri sec" onclick="lbCerrar()">Cerrar</button></div></div>';
+  m.innerHTML=h;lbCont();
+}
+function lbCont(){
+  var n=LB_L.filter(function(i){return LB_Sel[i.id]}).length;
+  Array.prototype.forEach.call(document.querySelectorAll('#lb_modal .lbn'),function(e){e.textContent=n});
+}
+function lbTog(k,c){LB_Sel[LB_L[k].id]=c;lbCont()}
+function lbTodas(c){LB_L.forEach(function(i){LB_Sel[i.id]=c});
+  Array.prototype.forEach.call(document.querySelectorAll('#lb_modal .ls input'),function(e){e.checked=c});lbCont()}
+function lbCerrar(){var m=$('lb_modal');if(m)m.remove()}
+function lbElegidas(){return LB_L.filter(function(i){return LB_Sel[i.id]})}
+function lbImprimir(){
+  var l=lbElegidas();
+  if(!l.length){$('st').textContent='Marca al menos una etiqueta';return}
+  imprimirEtiquetasHTML(l.map(function(i){return etiquetaHTML(i.dvMeta)}).join(''));
+}
+function imprimirEtiquetasLote(){lbAbrir()}
+function lbCargarPDF(cb){
+  if(window.jspdf){cb(true);return}
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  s.onload=function(){cb(!!window.jspdf)};
+  s.onerror=function(){cb(false)};
+  document.head.appendChild(s);
+}
+function lbPDF(){
+  var l=lbElegidas();
+  if(!l.length){$('st').textContent='Marca al menos una etiqueta';return}
+  $('st').textContent='Preparando PDF…';
+  lbCargarPDF(function(ok){
+    if(!ok){$('st').textContent='No se pudo cargar el generador de PDF (revisa tu conexión).';return}
+    try{
+      var J=window.jspdf.jsPDF,doc=new J({orientation:'landscape',unit:'in',format:[4,6]});
+      var cl=function(x){return String(x==null?'':x).replace(/[^\u0020-\u00FF]/g,'')};
+      l.forEach(function(it,idx){
+        var v=it.dvMeta;if(idx)doc.addPage([4,6],'landscape');
+        doc.setDrawColor(0);doc.setTextColor(0);
+        doc.setLineWidth(0.03);doc.roundedRect(0.1,0.1,5.8,3.8,0.06,0.06);
+        doc.setFont('helvetica','bold');doc.setFontSize(8);doc.text('Remitente',0.3,0.36);
+        doc.setLineWidth(0.02);doc.rect(0.3,0.42,2.5,0.82);
+        doc.setFontSize(7.5);doc.text('Envía: Little Nani',0.37,0.57);
+        doc.setFont('helvetica','normal');
+        ['Cartago, Alvarado, Cervantes','Calle Linda vista en Little Nani','Cédula 801290969','Tel: 8633-5721'].forEach(function(t,k){doc.text(t,0.37,0.7+k*0.13)});
+        var ub=cl([v.provincia,v.canton,v.distrito].filter(Boolean).join(', '));
+        var rows=[['Nombre:',cl(v.nombre)],['Teléfono:',cl(v.tel||'N/D')],['',ub],['Dirección:',cl(v.otrosDatos)]];
+        var fs=13,lines,y0,lh;
+        for(;fs>=8;fs--){
+          doc.setFontSize(fs);lh=fs*1.35/72;lines=[];
+          rows.forEach(function(r){
+            doc.setFont('helvetica','bold');var lw=r[0]?doc.getTextWidth(r[0]+' '):0;
+            doc.setFont('helvetica','normal');
+            var parts=doc.splitTextToSize(r[1]||' ',5.4-lw);
+            parts.forEach(function(p,k){lines.push({l:k?'':r[0],t:p,w:lw})});
+          });
+          y0=3.78-(0.32+lines.length*lh);
+          if(y0>=1.4)break;
+        }
+        doc.setFont('helvetica','bold');doc.setFontSize(fs+2);doc.text('Destinatario:',3,y0+0.2,{align:'center'});
+        doc.setFontSize(fs);var y=y0+0.32+lh*0.8;
+        lines.forEach(function(r){
+          if(r.l){doc.setFont('helvetica','bold');doc.text(r.l,0.3,y)}
+          doc.setFont('helvetica','normal');doc.text(r.t,0.3+r.w,y);y+=lh;
+        });
+      });
+      doc.save('etiquetas-little-nani-'+(DV_Q||today())+'.pdf');
+      $('st').textContent='';
+    }catch(e){$('st').textContent='Error al crear el PDF: '+e.message}
+  });
 }
 function filterDetalleVentas(el){
   DV_Q = el.value;
