@@ -110,6 +110,8 @@ var LOGO='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQ
 var S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[]},ready=false,authOk=false,tab='r',pend=null,ed=null,DB=null,AUTH=null,FS=null,U=null,ROL=null,rolOk=false,UN=[],RO=false,sed=false,edAh=null,Q={q:'',t:'',c:'',a:'',b:'',f:'',h:'',currentMonth:false};
 var CR_Q='';
 var needFr=false;
+var CR_Atr=false;
+var RM=null;
 document.addEventListener('focusout',function(){
   if(!needFr) return;
   setTimeout(function(){
@@ -151,7 +153,7 @@ function ent(){
   conn(c);
 }
 function out(){
-  UN.forEach(function(f){f()});UN=[];S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[]};ready=false;C='';P='';tab='r';ed=null;pend=null;sed=false;edAh=null;CR_Q='';edCrId=null;edDvId=null;DV_Q='';DV_SEARCH_Q='';DV_Limit=20;DV_Today=false;CR_Limit=50;dvArticulosTemp=[];
+  UN.forEach(function(f){f()});UN=[];S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[]};ready=false;C='';P='';tab='r';ed=null;pend=null;sed=false;edAh=null;CR_Q='';edCrId=null;edDvId=null;DV_Q='';DV_SEARCH_Q='';DV_Limit=20;DV_Today=false;CR_Limit=50;CR_Atr=false;RM=null;dvArticulosTemp=[];
   try{localStorage.removeItem('cn_code')}catch(e){}
   $('st').textContent='';render();
 }
@@ -745,6 +747,10 @@ function ahorrosSection(){
   return '<div class="grid"><div class="k bal"><span>Total Ahorrado</span><b class="pos">'+money(totAhorros)+'</b></div></div>'+cardsHtml;
 }
 
+function ventaAbono(c,monto,fecha){
+  return {id:'ab-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:'v',d:fecha,
+    n:'Abono apartado'+(c.num?' #'+c.num:'')+' · '+c.nombre,a:Math.round(monto*100)/100,ap:c.id};
+}
 function saveCreditoItem(){
   var num = $('cr_num').value.trim();
   var nombre = $('cr_nombre').value.trim();
@@ -777,7 +783,14 @@ function saveCreditoItem(){
   };
 
   if(DB){
-    DB.doc(P + 'creditos/' + id).set(creditoObj).then(function(){
+    var esNuevo = !edCrId && !S.creditos.some(function(c){ return c.id === id; });
+    var bs = FS.batch();
+    bs.set(FS.doc(P + 'creditos/' + id), creditoObj);
+    if(esNuevo && creditoObj.pagado > 0){
+      var vi = ventaAbono(creditoObj, creditoObj.pagado, fecha);
+      bs.set(FS.doc(P + 'items/' + vi.id), vi);
+    }
+    bs.commit().then(function(){
       edCrId = null;
       $('st').textContent = 'Apartado guardado en la base de datos';
       render();
@@ -811,11 +824,15 @@ function abonarCredito(id){
   if(cr){
     var pendiente = Math.round((cr.monto - cr.pagado)*100)/100;
     if(abono > pendiente) abono = pendiente;
+    abono = Math.round(abono*100)/100;
+    if(!(abono > 0)){ $('st').textContent = 'Este apartado ya está pagado'; return; }
 
     if(DB && firebase.firestore && firebase.firestore.FieldValue){
-      DB.doc(P + 'creditos/' + id).update({
-        pagado: firebase.firestore.FieldValue.increment(abono)
-      }).then(function(){
+      var vb = ventaAbono(cr, abono, today());
+      var bb = FS.batch();
+      bb.update(FS.doc(P + 'creditos/' + id), { pagado: firebase.firestore.FieldValue.increment(abono) });
+      bb.set(FS.doc(P + 'items/' + vb.id), vb);
+      bb.commit().then(function(){
         $('st').textContent = 'Abono registrado correctamente';
         render();
       }).catch(function(e){
@@ -864,6 +881,54 @@ function enviarReporteCliente(id){
   }
 }
 
+function crAtr(c){
+  var d=parseInt(c.plazo)||0,pend=Math.round((c.monto-c.pagado)*100)/100;
+  return d>0&&pend>0&&addDays(c.fecha,d)<today();
+}
+function atrasados(){return S.creditos.filter(crAtr)}
+function toggleAtrasados(el){
+  CR_Atr=el.checked;CR_Limit=50;
+  var c=$('creditos_list_container');if(c)c.innerHTML=renderCreditosList();
+}
+function mensajeAtraso(c){
+  var pend=Math.round((c.monto-c.pagado)*100)/100,lim=addDays(c.fecha,parseInt(c.plazo)||0);
+  var dias=Math.round((new Date(today()+'T00:00')-new Date(lim+'T00:00'))/86400000);
+  return '¡Hola '+c.nombre+'! 👋 Le escribimos de *Little Nani* para recordarle que el plazo de su apartado'+(c.num?' #'+c.num:'')+' venció el '+shDot(lim)+' (hace '+dias+(dias===1?' día':' días')+').\n\n'
+    +'📦 *Descripción:* '+(c.desc||'Apartado general')+'\n'
+    +'💰 *Monto total:* ₡'+money(c.monto)+'\n'
+    +'✅ *Abonado:* ₡'+money(c.pagado)+'\n'
+    +'⏳ *Saldo pendiente:* ₡'+money(pend)+'\n\n'
+    +'Quedamos atentos para coordinar su pago o cualquier consulta. ¡Muchas gracias! ✨';
+}
+function cerrarRM(){RM=null;$('rm_panel').innerHTML=''}
+function panelRM(){
+  if(!RM)return '';
+  var h='<div class="card" style="border:2px solid var(--ac)"><b>Recordatorios por WhatsApp</b>';
+  if(RM.i<RM.cola.length){
+    h+='<p class="mu" style="margin:6px 0">Enviados '+RM.i+' de '+RM.cola.length+'. Siguiente: <b>'+esc(RM.cola[RM.i].nombre)+'</b></p><button class="pri" onclick="enviarSiguienteRecordatorio()">📤 Enviar al siguiente</button>';
+  }else{
+    h+='<p class="mu" style="margin:6px 0">'+(RM.cola.length?'Listo: se abrieron '+RM.cola.length+' recordatorios.':'Ninguno de los atrasados tiene teléfono registrado.')+'</p>';
+  }
+  if(RM.sin.length)h+='<p class="mu" style="margin:8px 0 0">Sin teléfono (no se pudo enviar): '+RM.sin.map(esc).join(', ')+'</p>';
+  return h+'<button class="pri" style="margin-top:8px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="cerrarRM()">Cerrar</button></div>';
+}
+function iniciarRecordatorios(){
+  var l=atrasados().sort(function(a,b){return (parseInt(String(a.num).replace(/\D/g,''))||0)-(parseInt(String(b.num).replace(/\D/g,''))||0)});
+  var cola=l.filter(function(c){return String(c.tel||'').replace(/\D/g,'').length>=8}),sin=l.filter(function(c){return cola.indexOf(c)<0}).map(function(c){return c.nombre});
+  if(!l.length){$('st').textContent='No hay apartados atrasados';return}
+  if(!cola.length){RM={cola:[],i:0,sin:sin};$('rm_panel').innerHTML=panelRM();return}
+  if(!confirm('Se abrirá WhatsApp con el recordatorio para '+cola.length+' cliente(s) atrasado(s), uno por uno. ¿Continuar?'))return;
+  RM={cola:cola,i:0,sin:sin};
+  enviarSiguienteRecordatorio();
+}
+function enviarSiguienteRecordatorio(){
+  if(!RM||RM.i>=RM.cola.length)return;
+  var c=RM.cola[RM.i],t=String(c.tel).replace(/\D/g,'');
+  if(t.length===8)t='506'+t;
+  RM.i++;
+  window.open('https://api.whatsapp.com/send?phone='+t+'&text='+encodeURIComponent(mensajeAtraso(c)),'_blank');
+  $('rm_panel').innerHTML=panelRM();
+}
 function filterCreditos(el){
   CR_Q = el.value.trim().toLowerCase();
   CR_Limit = 50;
@@ -886,6 +951,7 @@ function renderCreditosList(){
   });
 
   var filtered = sortedCreditos.filter(function(c){
+    if(CR_Atr && !crAtr(c)) return false;
     if(!CR_Q) return true;
     var n = c.nombre.toLowerCase();
     var t = (c.tel || '').toLowerCase();
@@ -894,7 +960,7 @@ function renderCreditosList(){
   });
 
   if(!filtered.length){
-    return '<div class="card"><p class="mu" style="margin:4px 0">No se encontraron apartados con ese número, nombre o teléfono.</p></div>';
+    return '<div class="card"><p class="mu" style="margin:4px 0">'+(CR_Atr&&!CR_Q?'No hay apartados atrasados 🎉':'No se encontraron apartados con ese número, nombre o teléfono.')+'</p></div>';
   }
 
   var paginated = filtered.slice(0, CR_Limit);
@@ -984,6 +1050,13 @@ function creditosSection(){
         + '<button class="pri" onclick="saveCreditoItem()">'+(edObj ? 'Guardar Cambios' : 'Registrar Apartado')+'</button>'
         + (edObj ? '<button class="pri" style="margin-top:8px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="cancelEditCredito()">Cancelar</button>' : '')
         + '</div>'
+        + (function(){
+            var at=atrasados(),tv=at.reduce(function(a,c){return a+(c.monto-c.pagado)},0);
+            return '<div class="card"><div class="grid"><div class="k"><span>Apartados atrasados</span><b class="'+(at.length?'neg':'')+'">'+at.length+'</b></div><div class="k"><span>Total vencido</span><b class="neg">'+money(tv)+'</b></div></div>'
+              +'<label class="chk" style="margin-top:10px"><input type="checkbox" '+(CR_Atr?'checked':'')+' onchange="toggleAtrasados(this)"> Mostrar solo atrasados</label>'
+              +(at.length?'<button class="pri" style="background:var(--ok);color:#fff" onclick="iniciarRecordatorios()">📲 Recordatorio por WhatsApp a todos los atrasados ('+at.length+')</button>':'')
+              +'</div><div id="rm_panel">'+panelRM()+'</div>';
+          })()
         + '<h2>Buscar cliente</h2>'
         + '<input type="text" id="cr_search" placeholder="Buscar por número, nombre o teléfono..." value="'+esc(CR_Q)+'" oninput="filterCreditos(this)">'
         + '<h2>Reporte y listado de apartados activos</h2>'
