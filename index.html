@@ -99,7 +99,7 @@ tfoot td{font-weight:700;border-bottom:0}
 }
 #print-label-area{display:none}
 @page{margin:10mm}
-@media print{body>*:not(#print-label-area){display:none!important}#print-label-area{display:block!important}body{background:#fff}}
+@media print{.label-box:not(:last-child){break-after:page;page-break-after:always}body>*:not(#print-label-area){display:none!important}#print-label-area{display:block!important}body{background:#fff}}
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script></head>
@@ -110,6 +110,8 @@ var LOGO='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQ
 var S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[]},ready=false,authOk=false,tab='r',pend=null,ed=null,DB=null,AUTH=null,FS=null,U=null,ROL=null,rolOk=false,UN=[],RO=false,sed=false,edAh=null,Q={q:'',t:'',c:'',a:'',b:'',f:'',h:'',currentMonth:false};
 var CR_Q='';
 var needFr=false;
+var DV_Pend=false;
+var BUSY={};
 var CR_Atr=false;
 var RM=null;
 document.addEventListener('focusout',function(){
@@ -153,7 +155,7 @@ function ent(){
   conn(c);
 }
 function out(){
-  UN.forEach(function(f){f()});UN=[];S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[]};ready=false;C='';P='';tab='r';ed=null;pend=null;sed=false;edAh=null;CR_Q='';edCrId=null;edDvId=null;DV_Q='';DV_SEARCH_Q='';DV_Limit=20;DV_Today=false;CR_Limit=50;CR_Atr=false;RM=null;dvArticulosTemp=[];
+  UN.forEach(function(f){f()});UN=[];S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[]};ready=false;C='';P='';tab='r';ed=null;pend=null;sed=false;edAh=null;CR_Q='';edCrId=null;edDvId=null;DV_Q='';DV_SEARCH_Q='';DV_Limit=20;DV_Today=false;CR_Limit=50;CR_Atr=false;RM=null;DV_Pend=false;dvArticulosTemp=[];
   try{localStorage.removeItem('cn_code')}catch(e){}
   $('st').textContent='';render();
 }
@@ -752,6 +754,7 @@ function ventaAbono(c,monto,fecha){
     n:'Abono apartado'+(c.num?' #'+c.num:'')+' · '+c.nombre,a:Math.round(monto*100)/100,ap:c.id,cl:c.nombre};
 }
 function saveCreditoItem(){
+  if(BUSY.save) return;
   var num = $('cr_num').value.trim();
   var nombre = $('cr_nombre').value.trim();
   var tel = $('cr_tel').value.trim();
@@ -790,11 +793,15 @@ function saveCreditoItem(){
       var vi = ventaAbono(creditoObj, creditoObj.pagado, fecha);
       bs.set(FS.doc(P + 'items/' + vi.id), vi);
     }
+    BUSY.save = true;
+    setTimeout(function(){ BUSY.save = false; }, 8000);
     bs.commit().then(function(){
+      BUSY.save = false;
       edCrId = null;
       $('st').textContent = 'Apartado guardado en la base de datos';
       render();
     }).catch(function(e){
+      BUSY.save = false;
       $('st').textContent = 'Error al guardar: ' + e.message;
     });
   }
@@ -812,6 +819,7 @@ function cancelEditCredito(){
 }
 
 function abonarCredito(id){
+  if(BUSY[id]) return;
   var el = $('abono_' + id);
   if(!el) return;
   var abono = parseFloat(String(el.value).replace(',','.'));
@@ -832,10 +840,15 @@ function abonarCredito(id){
       var bb = FS.batch();
       bb.update(FS.doc(P + 'creditos/' + id), { pagado: firebase.firestore.FieldValue.increment(abono) });
       bb.set(FS.doc(P + 'items/' + vb.id), vb);
+      BUSY[id] = true;
+      setTimeout(function(){ BUSY[id] = false; }, 8000);
+      $('st').textContent = 'Guardando abono…';
       bb.commit().then(function(){
+        BUSY[id] = false;
         $('st').textContent = 'Abono registrado correctamente';
         render();
       }).catch(function(e){
+        BUSY[id] = false;
         $('st').textContent = 'Error al registrar abono: ' + e.message;
       });
     }
@@ -854,6 +867,37 @@ function eliminarCredito(id){
   }
 }
 
+function abonosDe(c){
+  var l=S.items.filter(function(i){return i.t==='v'&&i.ap===c.id}).sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:0});
+  var sm=l.reduce(function(x,i){return x+i.a},0);
+  return {l:l,sum:sm,prev:Math.max(0,Math.round((c.pagado-sm)*100)/100)};
+}
+function abonosTxt(c){
+  var r=abonosDe(c);if(!r.l.length&&!r.prev)return '';
+  return '🧾 *Abonos:*\n'+r.l.map(function(i){return '• '+shDot(i.d)+': ₡'+money(i.a)}).join('\n')+(r.prev?'\n• Abonos anteriores: ₡'+money(r.prev):'')+'\n\n';
+}
+function reciboHTML(c){
+  var r=abonosDe(c),pend=Math.round((c.monto-c.pagado)*100)/100,dp=parseInt(c.plazo)||0,lim=dp>0?addDays(c.fecha,dp):'';
+  var td='style="padding:6px 4px;border-bottom:1px solid #ccc;text-align:left"',tr='style="padding:6px 4px;border-bottom:1px solid #ccc;text-align:right"';
+  var rows=r.l.map(function(i){return '<tr><td '+td+'>'+shDot(i.d)+'</td><td '+tr+'>₡'+money(i.a)+'</td></tr>'}).join('')
+    +(r.prev?'<tr><td '+td+'>Abonos anteriores</td><td '+tr+'>₡'+money(r.prev)+'</td></tr>':'');
+  if(!rows)rows='<tr><td '+td+' colspan="2">Sin abonos registrados</td><td></td></tr>';
+  return '<div style="color:#000;background:#fff;font-family:Arial,sans-serif;max-width:7in;padding:24px;font-size:14px;line-height:1.4">'
+    +'<div style="display:flex;align-items:center;gap:14px;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:12px"><img src="'+LOGO+'" alt="" style="width:70px;height:70px;border-radius:50%"><div><div style="font-size:22px;font-weight:bold">Little Nani</div><div>Recibo de apartado'+(c.num?' #'+esc(c.num):'')+'</div></div></div>'
+    +'<div><b>Cliente:</b> '+esc(c.nombre)+(c.tel?' · Tel: '+esc(c.tel):'')+'</div>'
+    +'<div><b>Descripción:</b> '+esc(c.desc||'Apartado general')+'</div>'
+    +'<div><b>Fecha de inicio:</b> '+shDot(c.fecha)+(lim?' · <b>Fecha límite:</b> '+shDot(lim):'')+'</div>'
+    +'<table style="width:100%;min-width:0;border-collapse:collapse;margin:14px 0;font-size:14px"><thead><tr><th style="text-align:left;border-bottom:2px solid #000;padding:6px 4px;color:#000">Fecha del abono</th><th style="text-align:right;border-bottom:2px solid #000;padding:6px 4px;color:#000">Monto</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<div style="text-align:right;font-size:15px"><div>Monto total: <b>₡'+money(c.monto)+'</b></div><div>Total abonado: <b>₡'+money(c.pagado)+'</b></div><div style="font-size:18px;margin-top:4px">Saldo pendiente: <b>₡'+money(pend)+'</b></div></div>'
+    +'<div style="margin-top:18px;font-size:12px;color:#444">Emitido el '+shDot(today())+'. ¡Gracias por su compra!</div></div>';
+}
+function imprimirReciboApartado(id){
+  var c=S.creditos.filter(function(x){return x.id===id})[0];if(!c)return;
+  var la=$('print-label-area');
+  if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
+  la.innerHTML=reciboHTML(c);
+  window.print();
+}
 function enviarReporteCliente(id){
   var c = S.creditos.find(function(item){ return item.id === id; });
   if(!c) return;
@@ -865,6 +909,7 @@ function enviarReporteCliente(id){
           + '📦 *Descripción:* ' + (c.desc || 'Apartado general') + '\n'
           + '📅 *Fecha de inicio:* ' + shDot(c.fecha) + '\n'
           + (fechaLimite ? '⏰ *Fecha límite:* ' + shDot(fechaLimite) + ' (' + diasPlazo + ' días de plazo)\n' : '')
+          + abonosTxt(c)
           + '💰 *Monto total:* ₡' + money(c.monto) + '\n'
           + '✅ *Abonado:* ₡' + money(c.pagado) + '\n'
           + '⏳ *Saldo pendiente:* ₡' + money(pendiente) + '\n\n'
@@ -982,12 +1027,13 @@ function renderCreditosList(){
        + '</div><div style="display:flex;gap:4px"><button style="border:1px solid var(--bd);background:none;color:var(--tx);border-radius:8px;padding:4px 8px;font-size:12px" onclick="editCredito(\''+c.id+'\')">Editar</button><button style="border:1px solid var(--bd);background:none;color:var(--bad);border-radius:8px;padding:4px 8px;font-size:12px" onclick="eliminarCredito(\''+c.id+'\')">Eliminar</button></div></div>'
        + '<div style="margin-top:8px;display:flex;justify-content:space-between;font-size:14px"><span>Total: <b>'+money(c.monto)+'</b></span><span>Abonado: <b class="pos">'+money(c.pagado)+'</b></span><span>Resta: <b class="neg">'+money(pendiente)+'</b></span></div>';
     
-    cardHtml += '<div style="margin-top:10px;display:flex;gap:6px">';
+    cardHtml += '<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">';
     if(pendiente > 0){
       cardHtml += '<input id="abono_'+c.id+'" type="number" inputmode="decimal" step="0.01" placeholder="Monto a abonar" style="margin:0">'
          + '<button class="pri" style="width:auto;padding:0 14px" onclick="abonarCredito(\''+c.id+'\')">Abonar</button>';
     }
     cardHtml += '<button class="pri" style="width:auto;padding:0 14px;background:var(--ok);color:#fff" onclick="enviarReporteCliente(\''+c.id+'\')">📤 Enviar Reporte</button>';
+    cardHtml += '<button class="pri" style="width:auto;padding:8px 14px;background:var(--ac)" onclick="imprimirReciboApartado(\''+c.id+'\')">🧾 Recibo</button>';
     cardHtml += '</div>';
 
     cardHtml += '</div>';
@@ -1149,6 +1195,7 @@ function saveDetalleVentaItem(){
 
   var id = edDvId || ('dv-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
   
+  var prevDv = edDvId ? S.items.filter(function(i){ return i.id === edDvId; })[0] : null;
   var ventaObj = {
     id: id,
     t: 'v',
@@ -1164,7 +1211,8 @@ function saveDetalleVentaItem(){
       otrosDatos: otrosDatos,
       articulos: dvArticulosTemp,
       envio: Math.round(envio * 100) / 100,
-      guia: guia
+      guia: guia,
+      guiaEnviada: (prevDv && prevDv.dvMeta && prevDv.dvMeta.guia === guia) ? (prevDv.dvMeta.guiaEnviada || '') : ''
     }
   };
 
@@ -1240,6 +1288,7 @@ function ingresarGuiaRapida(id){
     }
   }
 
+  if(nuevaGuia !== actualGuia) item.dvMeta.guiaEnviada = '';
   item.dvMeta.guia = nuevaGuia;
   var cliente = item.dvMeta.nombre;
   item.n = 'Venta: ' + cliente + (nuevaGuia ? ' (Guía: ' + nuevaGuia + ')' : '');
@@ -1254,12 +1303,26 @@ function ingresarGuiaRapida(id){
   }
 }
 
+function marcarGuiaEnviada(id){
+  var it=S.items.filter(function(i){return i.id===id})[0];
+  if(!it||!it.dvMeta)return;
+  it.dvMeta.guiaEnviada=today();
+  if(DB)DB.doc(P+'items/'+id).set({dvMeta:{guiaEnviada:today()}},{merge:true}).catch(function(e){$('st').textContent='No se pudo marcar la guía como enviada: '+e.message});
+  var c=$('dv_list_container');if(c)c.innerHTML=renderDetallesVentasList();
+  refreshLote();
+}
+function toggleDvPend(el){
+  DV_Pend=el.checked;DV_Limit=20;
+  var c=$('dv_list_container');if(c)c.innerHTML=renderDetallesVentasList();
+}
 function enviarGuiaWhatsApp(id){
   var item = S.items.filter(function(i){ return i.id === id; })[0];
   if(!item || !item.dvMeta) return;
   var v = item.dvMeta;
 
   if(!v.guia) return;
+  if(v.guiaEnviada && !confirm('Ya se le avisó a ' + v.nombre + ' el ' + shDot(v.guiaEnviada) + '. ¿Enviar el aviso de nuevo?')) return;
+  marcarGuiaEnviada(id);
 
   var txt = '¡Hola ' + v.nombre + '! 👋 Le escribimos de *Little Nani* para informarle que su pedido ya tiene un número de guía asignado.\n\n'
           + '📦 *Número de guía:* ' + v.guia + '\n'
@@ -1277,19 +1340,8 @@ function enviarGuiaWhatsApp(id){
   }
 }
 
-function imprimirEtiquetaEnvio(id){
-  var item = S.items.filter(function(i){ return i.id === id; })[0];
-  if(!item || !item.dvMeta) return;
-  var v = item.dvMeta;
-  
-  var labelArea = $('print-label-area');
-  if(!labelArea){
-    labelArea = document.createElement('div');
-    labelArea.id = 'print-label-area';
-    document.body.appendChild(labelArea);
-  }
-  
-  labelArea.innerHTML = '<div class="label-box">'
+function etiquetaHTML(v){
+  return '<div class="label-box">'
     + '<div class="sender-container">'
     + '<div class="sender-title">Remitente</div>'
     + '<div class="sender-box">'
@@ -1308,13 +1360,49 @@ function imprimirEtiquetaEnvio(id){
     + '<b>Dirección:</b> ' + esc(v.otrosDatos || '')
     + '</div>'
     + '</div>';
+}
+function imprimirEtiquetaEnvio(id){
+  var item = S.items.filter(function(i){ return i.id === id; })[0];
+  if(!item || !item.dvMeta) return;
+  var v = item.dvMeta;
+  
+  var labelArea = $('print-label-area');
+  if(!labelArea){
+    labelArea = document.createElement('div');
+    labelArea.id = 'print-label-area';
+    document.body.appendChild(labelArea);
+  }
+  
+  labelArea.innerHTML = etiquetaHTML(v);
     
   window.print();
 }
 
+function sinGuiaDelDia(){
+  var dia=DV_Q||today();
+  return {dia:dia,l:S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&i.d===dia&&!String(i.dvMeta.guia||'').trim()})};
+}
+function loteBtn(){
+  var r=sinGuiaDelDia(),b;
+  var pc=S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&String(i.dvMeta.guia||'').trim()&&!i.dvMeta.guiaEnviada}).length;
+  if(!r.l.length)b='<p class="mu" style="margin:6px 0">Sin ventas pendientes de guía el '+shDot(r.dia)+'.</p>';
+  else b='<button type="button" class="pri" style="background:var(--ac);margin:6px 0" onclick="imprimirEtiquetasLote()">🖨️ Imprimir etiquetas sin guía ('+r.l.length+') · '+shDot(r.dia)+'</button>';
+  return b+'<label class="chk"><input type="checkbox" '+(DV_Pend?'checked':'')+' onchange="toggleDvPend(this)"> Solo guías por avisar al cliente ('+pc+')</label>';
+}
+function refreshLote(){var c=$('dv_lote');if(c)c.innerHTML=loteBtn()}
+function imprimirEtiquetasLote(){
+  var r=sinGuiaDelDia();
+  if(!r.l.length){$('st').textContent='No hay ventas sin guía el '+shDot(r.dia);return}
+  if(!confirm('Se imprimirán '+r.l.length+' etiqueta(s) de las ventas del '+shDot(r.dia)+' que aún no tienen guía. ¿Continuar?'))return;
+  var la=$('print-label-area');
+  if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
+  la.innerHTML=r.l.sort(function(a,b){return a.id<b.id?-1:1}).map(function(i){return etiquetaHTML(i.dvMeta)}).join('');
+  window.print();
+}
 function filterDetalleVentas(el){
   DV_Q = el.value;
   DV_Today = false;
+  refreshLote();
   var chk = $('dv_today_chk');
   if(chk) chk.checked = false;
   DV_Limit = 20;
@@ -1343,6 +1431,7 @@ function toggleDetalleVentasToday(el){
   DV_Limit = 20;
   var container = $('dv_list_container');
   if(container) container.innerHTML = renderDetallesVentasList();
+  refreshLote();
 }
 
 function cargarMasVentas(){
@@ -1351,10 +1440,27 @@ function cargarMasVentas(){
   if(container) container.innerHTML = renderDetallesVentasList();
 }
 
+function deshacerAbono(id){
+  var it=S.items.filter(function(x){return x.id===id})[0];
+  if(!it||!it.ap||BUSY[id]) return;
+  if(!confirm('¿Deshacer el abono de ₡'+money(it.a)+' de '+abonoNombre(it)+'? Se quitará de las ventas y se devolverá al saldo del apartado.')) return;
+  var cr=S.creditos.filter(function(c){return c.id===it.ap})[0];
+  var b=FS.batch();
+  b.delete(FS.doc(P+'items/'+id));
+  if(cr) b.update(FS.doc(P+'creditos/'+cr.id),{pagado:firebase.firestore.FieldValue.increment(-Math.min(it.a,cr.pagado||0))});
+  BUSY[id]=true;
+  setTimeout(function(){BUSY[id]=false},8000);
+  b.commit().then(function(){
+    BUSY[id]=false;
+    $('st').textContent='Abono deshecho'+(cr?'; el monto volvió al saldo del apartado':' (el apartado ya no existe)');
+    render();
+  }).catch(function(e){BUSY[id]=false;$('st').textContent='Error al deshacer el abono: '+e.message});
+}
 function abonoNombre(i){return i.cl||String(i.n||'').split(' · ').slice(1).join(' · ')||String(i.n||'Abono')}
 function renderDetallesVentasList(){
   var ventasDetalladas = S.items.filter(function(i){ 
     if(i.t !== 'v' || !(i.dvMeta || i.ap)) return false;
+    if(DV_Pend && !(i.dvMeta && String(i.dvMeta.guia||'').trim() && !i.dvMeta.guiaEnviada)) return false;
     if(DV_Q && i.d !== DV_Q) return false;
     if(DV_SEARCH_Q){
       var v = i.dvMeta || {nombre: abonoNombre(i)};
@@ -1377,7 +1483,8 @@ function renderDetallesVentasList(){
     if(!item.dvMeta){
       var mn = String(item.n||'').match(/#(\S+)/);
       return '<div class="card"><b>'+esc(abonoNombre(item))+'</b> <span class="bd ok">₡'+money(item.a)+'</span>'
-        +'<small class="mu">Fecha: '+shDot(item.d)+' · Abono de apartado'+(mn?' #'+esc(mn[1]):'')+'</small></div>';
+        +'<small class="mu">Fecha: '+shDot(item.d)+' · Abono de apartado'+(mn?' #'+esc(mn[1]):'')+'</small>'
+        +'<div style="margin-top:8px"><button style="border:1px solid var(--bd);background:none;color:var(--bad);border-radius:8px;padding:4px 8px;font-size:12px" onclick="deshacerAbono(\''+item.id+'\')">Deshacer abono</button></div></div>';
     }
     var v = item.dvMeta;
     var artsStr = (v.articulos || []).map(function(a){ return a.desc + ' (₡' + money(a.precio) + ')'; }).join(', ');
@@ -1386,7 +1493,7 @@ function renderDetallesVentasList(){
     return '<div class="card">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start"><div>'
       + '<b>'+esc(v.nombre)+'</b> <span class="bd ok">₡'+money(item.a)+'</span>'
-      + '<small class="mu">Fecha: '+shDot(item.d)+(v.tel ? ' · Tel: '+esc(v.tel) : '')+(tieneGuia ? ' · Guía: <b>'+esc(v.guia)+'</b>' : ' · <span style="color:var(--bad)">Sin guía</span>')+'</small>'
+      + '<small class="mu">Fecha: '+shDot(item.d)+(v.tel ? ' · Tel: '+esc(v.tel) : '')+(tieneGuia ? ' · Guía: <b>'+esc(v.guia)+'</b>'+(v.guiaEnviada?' <span class="bd ok">✓ Enviada '+shDot(v.guiaEnviada)+'</span>':' <span class="bd">Falta avisar</span>') : ' · <span style="color:var(--bad)">Sin guía</span>')+'</small>'
       + '<small><b>Artículos:</b> '+esc(artsStr)+'</small>'
       + '<small class="mu"><b>Envío:</b> ₡'+money(v.envio)+' · <b>Dirección:</b> '+esc([v.provincia, v.canton, v.distrito, v.otrosDatos].filter(Boolean).join(', '))+'</small>'
       + '</div><div style="display:flex;gap:4px">'
@@ -1396,7 +1503,7 @@ function renderDetallesVentasList(){
       + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'
       + '<button class="pri" style="background:var(--ac);width:auto;padding:8px 14px" onclick="imprimirEtiquetaEnvio(\''+item.id+'\')">🖨️ Imprimir Etiqueta</button>'
       + '<button class="pri" style="background:var(--ac);width:auto;padding:8px 14px" onclick="ingresarGuiaRapida(\''+item.id+'\')">🏷️ Introducir número de guía</button>'
-      + '<button class="pri" style="background:'+(tieneGuia ? 'var(--ok)' : 'var(--mu)')+';color:#fff;width:auto;padding:8px 14px;'+(tieneGuia ? '' : 'opacity:0.6;cursor:not-allowed;')+'" '+(tieneGuia ? 'onclick="enviarGuiaWhatsApp(\''+item.id+'\')"' : 'disabled title="Debe ingresar el número de guía primero"')+'>📤 Enviar Guía por WhatsApp</button>'
+      + '<button class="pri" style="background:'+(tieneGuia ? 'var(--ok)' : 'var(--mu)')+';color:#fff;width:auto;padding:8px 14px;'+(tieneGuia ? '' : 'opacity:0.6;cursor:not-allowed;')+'" '+(tieneGuia ? 'onclick="enviarGuiaWhatsApp(\''+item.id+'\')"' : 'disabled title="Debe ingresar el número de guía primero"')+'>'+(v.guiaEnviada?'🔁 Reenviar guía':'📤 Enviar Guía por WhatsApp')+'</button>'
       + '</div>'
       + '</div>';
   }).join('');
@@ -1447,6 +1554,7 @@ function detallesVentasSection(){
         + (edObj ? '<button type="button" class="pri" style="margin-top:8px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="cancelEditDetalleVenta()">Cancelar</button>' : '')
         + '</div>'
 
+        + '<div id="dv_lote">'+loteBtn()+'</div>'
         + '<h2>Buscar cliente o guía</h2>'
         + '<input type="text" id="dv_search_text" placeholder="Buscar por nombre, teléfono o número de guía..." value="'+esc(DV_SEARCH_Q)+'" oninput="filterDetalleVentasTexto(this)">'
 
