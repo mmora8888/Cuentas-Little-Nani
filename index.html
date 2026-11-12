@@ -75,7 +75,8 @@ tfoot td{font-weight:700;border-bottom:0}
 @media print{html,body{margin:0;padding:0;background:#fff}.lb-page:not(:last-child){break-after:page;page-break-after:always}body>*:not(#print-label-area){display:none!important}#print-label-area{display:block!important}}
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script></head>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script></head>
 <body><div id="app"></div><div id="st" class="mu" style="text-align:center"></div>
 <script>
 var firebaseConfig={apiKey:"",authDomain:"cuentas-little-nani.firebaseapp.com",projectId:"cuentas-little-nani",storageBucket:"cuentas-little-nani.firebasestorage.app",messagingSenderId:"98802163142",appId:"1:98802163142:web:a3f5935ca4f0a137cc66c7"};
@@ -121,23 +122,49 @@ function cls(n){return n<0?'neg':'pos'}
 
 var C='',P='';
 function gateView(){
-  return '<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Cuentas del negocio</span></div></div><div class="card"><label class="mu">Código de acceso</label><input id="cd" type="password" autocomplete="off" onkeydown="if(event.key===\'Enter\')ent()"><button class="pri" onclick="ent()">Entrar</button></div>';
+  var sv='';try{sv=localStorage.getItem('cn_code')||''}catch(e){}
+  var ky='onkeydown="if(event.key===\'Enter\')ent()"';
+  return '<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Cuentas del negocio</span></div></div><div class="card">'
+    +(U?'<p class="mu" style="margin:0 0 8px">Sesión iniciada como '+esc(U.email||'')+'. Escribe el código del negocio para continuar.</p>'
+       :'<label class="mu">Correo</label><input id="em" type="email" autocomplete="username" inputmode="email" '+ky+'>'
+        +'<label class="mu">Contraseña</label><input id="pw" type="password" autocomplete="current-password" '+ky+'>')
+    +'<label class="mu">Código del negocio</label><input id="cd" type="password" autocomplete="off" value="'+esc(sv)+'" '+ky+'>'
+    +'<button class="pri" onclick="ent()">Entrar</button>'
+    +(U?'<button type="button" class="pri" style="margin-top:8px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="out()">Cerrar sesión</button>'
+       :'<button type="button" class="pri" style="margin-top:8px;background:none;color:var(--mu);border:0;font-weight:400" onclick="recuperar()">¿Olvidaste tu contraseña?</button>')
+    +'</div>';
 }
+var PC='';
 function ent(){
   var c=$('cd').value.trim();
-  if(!c||/[\/.]/.test(c)){$('st').textContent='Escribe tu código de acceso';return}
-  conn(c);
+  if(!c||/[\/.]/.test(c)){$('st').textContent='Escribe el código del negocio';return}
+  if(U){conn(c);return}
+  var em=($('em').value||'').trim(),pw=$('pw').value||'';
+  if(!em||!pw){$('st').textContent='Escribe tu correo y tu contraseña';return}
+  $('st').textContent='Entrando…';PC=c;
+  AUTH.signInWithEmailAndPassword(em,pw).then(function(){$('st').textContent=''}).catch(function(e){
+    PC='';
+    var m={'auth/invalid-credential':'Correo o contraseña incorrectos','auth/wrong-password':'Correo o contraseña incorrectos','auth/user-not-found':'Correo o contraseña incorrectos','auth/invalid-email':'El correo no es válido','auth/too-many-requests':'Demasiados intentos. Espera unos minutos e inténtalo de nuevo','auth/network-request-failed':'Sin conexión. Revisa tu internet','auth/operation-not-allowed':'El inicio con correo y contraseña no está activado en Firebase','auth/user-disabled':'Este usuario está deshabilitado'};
+    $('st').textContent=m[e&&e.code]||('No se pudo iniciar sesión: '+(e&&e.message));
+  });
+}
+function recuperar(){
+  var em=($('em')&&$('em').value||'').trim();
+  if(!em){$('st').textContent='Escribe tu correo arriba y toca de nuevo "¿Olvidaste tu contraseña?"';return}
+  AUTH.sendPasswordResetEmail(em).then(function(){$('st').textContent='Te enviamos un correo para restablecer la contraseña. Revisa también la carpeta de spam.'}).catch(function(e){
+    $('st').textContent=(e&&e.code==='auth/invalid-email')?'El correo no es válido':'No se pudo enviar el correo: '+(e&&e.message);
+  });
 }
 function out(){
   UN.forEach(function(f){f()});UN=[];S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[],cotizaciones:[],cxp:[]};ready=false;C='';P='';tab='r';ed=null;pend=null;sed=false;edAh=null;CR_Q='';edCrId=null;edDvId=null;DV_Q='';DV_SEARCH_Q='';DV_Limit=20;DV_Today=false;CR_Limit=50;CR_Atr=false;RM=null;DV_Pend=false;dvArticulosTemp=[];edCxId=null;CX_Pag=false;CX_Q='';
-  try{localStorage.removeItem('cn_code')}catch(e){}
+  U=null;if(AUTH)AUTH.signOut();
   $('st').textContent='';render();
 }
 function conn(c){
   UN.forEach(function(f){f()});UN=[];S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[],cotizaciones:[],cxp:[]};ready=false;C=c;P='cuentas/'+c+'/';
   $('st').textContent='';render();
   var er=function(e){
-    if(e&&e.code==='permission-denied'){UN.forEach(function(f){f()});UN=[];C='';P='';ready=false;try{localStorage.removeItem('cn_code')}catch(x){}render();$('st').textContent='Código incorrecto'}
+    if(e&&e.code==='permission-denied'){UN.forEach(function(f){f()});UN=[];C='';P='';ready=false;try{localStorage.removeItem('cn_code')}catch(x){}render();$('st').textContent='Sin permiso: revisa el código del negocio o que tu usuario esté autorizado en Firebase'}
     else{if(e&&/api.?key/i.test(e.message||'')){try{localStorage.removeItem('cn_key')}catch(x){}}$('st').textContent='No se pudo leer la base de datos: '+(e&&e.message)}
   };
   var fr=function(){
@@ -186,9 +213,20 @@ function init(){
   if(!k){k=(prompt('Pega la clave API de Firebase (se pide una sola vez en este dispositivo):')||'').trim();if(k){try{localStorage.setItem('cn_key',k)}catch(e){}}}
   if(!k){$('app').innerHTML='<p class="mu">Falta la clave API de Firebase. Recarga la página y pégala cuando se te pida.</p>';return}
   firebaseConfig.apiKey=k;
-  firebase.initializeApp(firebaseConfig);FS=firebase.firestore();DB=FS;
-  var c='';try{c=localStorage.getItem('cn_code')||''}catch(e){}
-  if(c)conn(c);else render();
+  firebase.initializeApp(firebaseConfig);FS=firebase.firestore();DB=FS;AUTH=firebase.auth();
+  $('app').innerHTML='<p class="mu">Cargando…</p>';
+  AUTH.onAuthStateChanged(function(u){
+    U=u;authOk=true;
+    if(u){
+      var c=PC;PC='';
+      if(!c){try{c=localStorage.getItem('cn_code')||''}catch(e){}}
+      if(c)conn(c);else{C='';P='';ready=false;render()}
+    }else{
+      UN.forEach(function(f){f()});UN=[];C='';P='';ready=false;
+      S={items:[],saldo:0,ahorros:{casa:0,viaje:0,ninos:0},creditos:[],cotizaciones:[],cxp:[]};
+      render();
+    }
+  });
 }
 function save(){}
 function pm(v){if(!v)return;var y=+v.slice(0,4),m=+v.slice(5);PF=iso(new Date(y,m-1,1));PT=iso(new Date(y,m,0));render()}
