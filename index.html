@@ -122,13 +122,15 @@ function cls(n){return n<0?'neg':'pos'}
 
 var C='',P='';
 function gateView(){
-  var sv='';try{sv=localStorage.getItem('cn_code')||''}catch(e){}
+  var sv='',se='';try{sv=localStorage.getItem('cn_code')||'';se=localStorage.getItem('cn_email')||''}catch(e){}
   var ky='onkeydown="if(event.key===\'Enter\')ent()"';
   return '<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Cuentas del negocio</span></div></div><div class="card">'
     +(U?'<p class="mu" style="margin:0 0 8px">Sesión iniciada como '+esc(U.email||'')+'. Escribe el código del negocio para continuar.</p>'
-       :'<label class="mu">Correo</label><input id="em" type="email" autocomplete="username" inputmode="email" '+ky+'>'
-        +'<label class="mu">Contraseña</label><input id="pw" type="password" autocomplete="current-password" '+ky+'>')
-    +'<label class="mu">Código del negocio</label><input id="cd" type="password" autocomplete="off" value="'+esc(sv)+'" '+ky+'>'
+       :'<label class="mu">Correo</label><input id="em" type="email" autocomplete="username" inputmode="email" value="'+esc(se)+'" '+ky+'>'
+        +'<label class="mu">Contraseña</label><input id="pw" type="password" autocomplete="current-password" '+ky+'>'
+        +'<label class="chk"><input type="checkbox" onchange="$(\'pw\').type=this.checked?\'text\':\'password\'"> Mostrar contraseña</label>'
+        +'<label class="chk"><input type="checkbox" id="rm" checked> Recordar mi correo en este dispositivo</label>')
+    +'<label class="mu">Código del negocio</label><input id="cd" type="text" autocomplete="off" autocapitalize="off" value="'+esc(sv)+'" '+ky+'>'
     +'<button class="pri" onclick="ent()">Entrar</button>'
     +(U?'<button type="button" class="pri" style="margin-top:8px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="out()">Cerrar sesión</button>'
        :'<button type="button" class="pri" style="margin-top:8px;background:none;color:var(--mu);border:0;font-weight:400" onclick="recuperar()">¿Olvidaste tu contraseña?</button>')
@@ -142,6 +144,7 @@ function ent(){
   var em=($('em').value||'').trim(),pw=$('pw').value||'';
   if(!em||!pw){$('st').textContent='Escribe tu correo y tu contraseña';return}
   $('st').textContent='Entrando…';PC=c;
+  try{if($('rm')&&!$('rm').checked)localStorage.removeItem('cn_email');else localStorage.setItem('cn_email',em)}catch(e){}
   AUTH.signInWithEmailAndPassword(em,pw).then(function(){$('st').textContent=''}).catch(function(e){
     PC='';
     var m={'auth/invalid-credential':'Correo o contraseña incorrectos','auth/wrong-password':'Correo o contraseña incorrectos','auth/user-not-found':'Correo o contraseña incorrectos','auth/invalid-email':'El correo no es válido','auth/too-many-requests':'Demasiados intentos. Espera unos minutos e inténtalo de nuevo','auth/network-request-failed':'Sin conexión. Revisa tu internet','auth/operation-not-allowed':'El inicio con correo y contraseña no está activado en Firebase','auth/user-disabled':'Este usuario está deshabilitado'};
