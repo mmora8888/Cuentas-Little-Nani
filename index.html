@@ -1894,7 +1894,8 @@ function cxLista(){
 }
 function cxSection(){
   var P_=cxPendList(),t=cxTot(P_);
-  return '<div class="grid"><div class="k"><span>Total por pagar</span><b class="'+(t.s>0?'neg':'')+'">'+money(t.s)+'</b></div><div class="k"><span>Facturas pendientes</span><b>'+P_.length+'</b></div></div>'
+  return '<button type="button" class="pri" style="margin-bottom:10px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="go(\'f\')">← Volver a Facturas</button>'
+    +'<div class="grid"><div class="k"><span>Total por pagar</span><b class="'+(t.s>0?'neg':'')+'">'+money(t.s)+'</b></div><div class="k"><span>Facturas pendientes</span><b>'+P_.length+'</b></div></div>'
     +'<div style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="pri" style="flex:1" onclick="expCx()">Exportar a Excel (CSV)</button></div>'
     +'<input type="text" id="cx_q" placeholder="Buscar proveedor..." value="'+esc(CX_Q)+'" oninput="cxBuscar(this)">'
     +'<label class="chk"><input type="checkbox" '+(CX_Pag?'checked':'')+' onchange="cxVerPagadas(this)"> Ver cuentas pagadas</label>'
@@ -2181,7 +2182,9 @@ function section(t,wi){
       +'<small>'+shDot(i.d)+(i.n?' · '+esc(i.n):'')+(t==='f'?' · '+(i.e?'Electrónica':'No electrónica')+(cxPend(i.id)?' · ⏳ Pendiente de pago':''):'')+(t==='g'?' · '+esc(i.c):'')+(t==='f'&&i.j?' · Céd. '+esc(i.j):'')+'</small></div>'
       +'<button onclick="eds(\''+i.id+'\')">Editar</button><button onclick="del(\''+i.id+'\')">'+(pend===i.id?'¿Seguro?':'✕')+'</button></div>';
   });
-  return h+'</div>';
+  h+='</div>';
+  if(t==='f'){var cxn=cxPendList().length;h='<button type="button" class="pri" style="margin-bottom:10px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="go(\'cx\')">💳 Cuentas x Pagar'+(cxn?' ('+cxn+' pendiente'+(cxn===1?'':'s')+')':'')+'</button>'+h}
+  return h;
 }
 function render(){
   needFr=false;
@@ -2189,8 +2192,8 @@ function render(){
   if(!C){root.className='';root.innerHTML=gateView();return}
   if(!ready){root.innerHTML='<p class="mu">Cargando…</p>';return}
   var wi=S.items.filter(function(i){return i&&i.d&&wk(i.d)===W});
-  var tabsConfig=[['r','Resumen'],['dv','Ventas'],['f','Facturas'],['cx','Cuentas x Pagar'],['g','Gastos'],['ah','Ahorros'],['cr','Apartados'],['b','Reportes']];
-  var h='<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Cuentas del negocio</span></div><button class="lo" onclick="out()">Salir</button></div><div class="tabs">'+tabsConfig.map(function(p){return '<button class="'+(tab===p[0]||(p[0]==='dv'&&tab==='ct')?'on':'')+'" onclick="go(\''+p[0]+'\')">'+p[1]+'</button>'}).join('')+'</div>';
+  var tabsConfig=[['r','Resumen'],['dv','Ventas'],['f','Facturas'],['g','Gastos'],['ah','Ahorros'],['cr','Apartados'],['b','Reportes']];
+  var h='<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Cuentas del negocio</span></div><button class="lo" onclick="out()">Salir</button></div><div class="tabs">'+tabsConfig.map(function(p){return '<button class="'+(tab===p[0]||(p[0]==='dv'&&tab==='ct')||(p[0]==='f'&&tab==='cx')?'on':'')+'" onclick="go(\''+p[0]+'\')">'+p[1]+'</button>'}).join('')+'</div>';
   if(tab!=='b'&&tab!=='ah'&&tab!=='cr'&&tab!=='dv'&&tab!=='ct'&&tab!=='cx')h+='<div class="wk"><button onclick="mv(-1)" aria-label="Semana anterior">‹</button><div><b>'+wl(W)+'</b><span class="mu">'+(W===wk(today())?'Esta semana':'&nbsp;')+'</span></div><button onclick="mv(1)" aria-label="Semana siguiente">›</button></div>';
   h+=tab==='r'?summary(wi):tab==='b'?search():tab==='ah'?ahorrosSection():tab==='cr'?creditosSection():tab==='dv'?detallesVentasSection():tab==='ct'?cotizacionesSection():tab==='cx'?cxSection():section(tab,wi);
   root.className=RO?'ro':'';root.innerHTML=h;
