@@ -665,7 +665,31 @@ function imprimirReporteProveedores(){
   var el = $('reporte_proveedores_card');
   if(!el) return;
   var w = window.open('', '_blank');
-  w.document.write('<html><head><title>Reporte de Facturas por Proveedor · Little Nani</title><style>body{font-family:sans-serif;padding:20px;color:#000;background:#fff}.card{border:1px solid #ccc;border-radius:8px;padding:16px;margin-bottom:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}button{display:none!important}b{font-weight:700}.mu{color:#666;font-size:12px}</style></head><body>');
+  w.document.write('<html><head><title>Reporte de Facturas por Proveedor · Little Nani</title><style>body{font-family:sans-serif;padding:20px;color:#000;background:#fff}.card{border:1px solid #ccc;border-radius:8px;padding:16px;margin-bottom:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}button{display:none!important}b{font-weight:700}.mu{color:#666;font-size:12px}
+/* Presentación visual de Ventas: cambios exclusivamente de diseño */
+.sales-page{--sales-ink:#193b55;--sales-teal:#287b80;max-width:1120px;margin:0 auto;padding-bottom:24px}
+.sales-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:20px 20px;margin:2px 0 18px;border-radius:20px;background:linear-gradient(125deg,#173b59 0%,#286d78 100%);color:#fff;box-shadow:0 10px 26px rgba(23,59,89,.13)}
+.sales-heading h1{font-size:26px;line-height:1.15;margin:4px 0 5px;color:#fff;font-weight:800;letter-spacing:-.4px}
+.sales-heading p{margin:0;color:rgba(255,255,255,.82);font-size:13px}
+.sales-eyebrow{font-size:10px;font-weight:750;letter-spacing:.16em;color:#b9e1df}
+.sales-heading-icon{width:48px;height:48px;flex:0 0 48px;border-radius:15px;display:grid;place-items:center;background:rgba(255,255,255,.14);font-size:25px;color:#fff}
+.sales-page h2{font-size:16px;font-weight:750;color:var(--sales-ink);margin:22px 0 10px;padding-left:11px;border-left:3px solid #4a9b9b}
+.sales-page .grid{display:grid;grid-template-columns:1fr;gap:10px;margin:0 0 16px}
+.sales-page .k.bal{border:1px solid #d8e8e9;border-radius:16px;padding:17px 18px;background:linear-gradient(135deg,#f1f8f8,#fff);box-shadow:0 5px 16px rgba(25,59,85,.045)}
+.sales-page .k.bal span{font-size:12px;color:#55717e;font-weight:650}
+.sales-page .k.bal b{font-size:25px;color:#1f7777;display:block;margin-top:5px}
+.sales-page>.card,.sales-page .card{border:1px solid #e1e9ed;border-radius:16px;padding:15px;background:var(--card);box-shadow:0 5px 16px rgba(25,59,85,.045);margin:9px 0}
+.sales-page input,.sales-page select,.sales-page textarea{border:1px solid #d9e3e8;border-radius:10px;padding:11px 12px;background:var(--card);min-height:42px}
+.sales-page input:focus,.sales-page select:focus,.sales-page textarea:focus{outline:2px solid rgba(40,123,128,.18);border-color:#4b9999}
+.sales-page .row{gap:9px}
+.sales-page .pri{border-radius:10px;font-weight:650;min-height:40px}
+.sales-page #dv_list_container .card{padding:16px;border-radius:15px;border-left:3px solid #6ba6a3}
+.sales-page #dv_list_container .card>b{font-size:15px;color:var(--sales-ink)}
+.sales-page #dv_list_container small{line-height:1.55}
+.sales-page .mu{line-height:1.5}
+@media(min-width:700px){.sales-heading{padding:24px 28px}.sales-heading h1{font-size:30px}.sales-page .grid{grid-template-columns:1fr}.sales-page .card{padding:19px}}
+@media(max-width:520px){.sales-heading{padding:17px;border-radius:15px}.sales-heading-icon{width:40px;height:40px;flex-basis:40px}.sales-page .row{flex-direction:column}.sales-page #dv_list_container .card>div:first-child{gap:8px;flex-wrap:wrap}}
+</style></head><body>');
   w.document.write(el.innerHTML);
   w.document.write('</body></html>');
   w.document.close();
@@ -1933,7 +1957,9 @@ function detallesVentasSection(){
         + '<h2>Listado de ventas detalladas</h2>'
         + '<div id="dv_list_container">' + renderDetallesVentasList() + '</div>';
 
-  return h;
+  return '<div class="sales-page">'
+    + '<div class="sales-heading"><div><div class="sales-eyebrow">GESTIÓN COMERCIAL</div><h1>Ventas</h1><p>Administra tus ventas, clientes y envíos desde un solo lugar.</p></div><div class="sales-heading-icon">↗</div></div>'
+    + h + '</div>';
 }
 
 function resumenMesData(desde,hasta){
