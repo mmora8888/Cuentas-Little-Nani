@@ -565,7 +565,7 @@ function chart(ws,keys){
 function period(cards,fx){
   var a=S.items.filter(function(i){return i.d>=PF&&i.d<=PT}),f=PF.slice(0,7);
   var mv=(PF.slice(8)==='01'&&PT===iso(new Date(+f.slice(0,4),+f.slice(5),0)))?f:'';
-  return '<h2>Balance por periodo</h2><div class="card"><label class="mu">Mes</label><input type="month" value="'+mv+'" onchange="pm(this.value)"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label class="mu">Desde</label><input type="date" value="'+PF+'" onchange="pr(0,this.value)"></div><div><label class="mu">Hasta</label><input type="date" value="'+PT+'" onchange="pr(1,this.value)"></div></div></div>'+cards(sum(a))+'<p class="mu">'+fx(a)+'</p>'+cat(a,'Gastos por categoría del periodo');
+  return '<h2>Balance por periodo</h2><div class="card"><label class="mu">Mes</label><input type="month" value="'+mv+'" onchange="pm(this.value)"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label class="mu">Desde</label><input type="date" value="'+PF+'" onchange="pr(0,this.value)"></div><div><label class="mu">Hasta</label><input type="date" value="'+PT+'" onchange="pr(1,this.value)"></div></div></div>'+cards(sum(a, true))+'<p class="mu">'+fx(a)+'</p>'+cat(a,'Gastos por categoría del periodo');
 }
 function put(it){
   var k=S.items.map(function(x){return x.id}).indexOf(it.id);
@@ -803,7 +803,11 @@ function ahorrosSection(){
   var totAhorros=0;
   var cardsHtml=subs.map(function(s){
     var base=S.ahorros[s.id]||0;
-    var itemsAhorro = S.items.filter(function(i){return i.t==='g'&&i.c===s.cat});
+    var itemsAhorro = S.items.filter(function(i){
+      if(i.t!=='g'||i.c!==s.cat) return false;
+      if(s.id==='ninos' && (i.n||'').indexOf('Pago Casa')>=0) return false;
+      return true;
+    });
     var reg=itemsAhorro.reduce(function(acc,i){return acc+i.a},0);
     var total=base+reg;
     totAhorros+=total;
@@ -982,7 +986,7 @@ function gastosCasaSection(){
   ];
 
   var totalApartado = S.items.filter(function(i){return i.t==='g'&&i.c==='Fondo Casa'}).reduce(function(a,b){return a+b.a},0);
-  var totalPagado = S.items.filter(function(i){return i.t==='g'&&(i.c==='Gastos Casa'||(i.c==='Ahorro Niños'&&(i.n||'').indexOf('Pago Casa')>=0))}).reduce(function(a,b){return a+b.a},0);
+  var totalPagado = S.items.filter(function(i){return i.t==='g'&&(i.c==='Gastos Casa'||(i.c==='Ahorro Niños'&&(i.n||'').indexOf('Pago Casa')>=0)||((i.n||'').indexOf('Pago Casa:')>=0))}).reduce(function(a,b){return a+b.a},0);
   var disponible = totalApartado - totalPagado;
 
   var h = '<button type="button" class="pri" style="margin-bottom:10px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="go(\'g\')">← Volver a Gastos</button>'
@@ -1983,7 +1987,7 @@ function resumenAlertas(balanceReal){
 function summary(wi){
   var s=sum(wi,true),g=sum(S.items),totalApartadosPendientes=0;
   S.creditos.forEach(function(c){totalApartadosPendientes+=(c.monto||0)-(c.pagado||0)});
-  var porPagar=cxTot(cxPendList()).s,balanceReal=g.b+(S.saldo||0)+porPagar;
+  var porPagar=cxTot(cxPendList()).s,balanceReal=g.b+(S.saldo||0);
   var balanceProyectado=balanceReal-porPagar+totalApartadosPendientes;
   var fx=function(a){var e=0,n=0;a.forEach(function(i){if(i.t==='f'){if(i.e)e+=i.a;else n+=i.a}});return 'Facturas electrónicas '+money(e)+' · No electrónicas '+money(n)};
   var comp=resumenComparacionMes(),flujo=resumenFlujo(comp.desde,comp.hasta),cu=cuentasTotalCRC();
