@@ -2485,10 +2485,21 @@ function render(){
   if(!ready){root.innerHTML='<p class="mu">Cargando…</p>';return}
   var wi=S.items.filter(function(i){return i&&i.d&&wk(i.d)===W});
   var tabsConfig=[['r','Resumen'],['dv','Ventas'],['f','Facturas'],['g','Gastos'],['ah','Ahorros'],['cr','Apartados'],['b','Reportes']];
+  var oldTabs=root.querySelector('.tabs');var tabsSX=oldTabs?oldTabs.scrollLeft:0;
   var h='<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Cuentas del negocio</span></div><button class="lo" onclick="out()">Salir</button></div><div class="tabs">'+tabsConfig.map(function(p){return '<button class="'+(tab===p[0]||(p[0]==='dv'&&tab==='ct')||(p[0]==='f'&&tab==='cx')||(p[0]==='g'&&tab==='gc')?'on':'')+'" onclick="go(\''+p[0]+'\')">'+p[1]+'</button>'}).join('')+'</div>';
   if(tab!=='b'&&tab!=='ah'&&tab!=='cr'&&tab!=='dv'&&tab!=='ct'&&tab!=='cx'&&tab!=='gc')h+='<div class="wk"><button onclick="mv(-1)" aria-label="Semana anterior">‹</button><div><b>'+wl(W)+'</b><span class="mu">'+(W===wk(today())?'Esta semana':'&nbsp;')+'</span></div><button onclick="mv(1)" aria-label="Semana siguiente">›</button></div>';
   h+=tab==='r'?summary(wi):tab==='b'?search():tab==='ah'?ahorrosSection():tab==='cr'?creditosSection():tab==='dv'?detallesVentasSection():tab==='ct'?cotizacionesSection():tab==='cx'?cxSection():tab==='gc'?gastosCasaSection():section(tab,wi);
   root.className=RO?'ro':'';root.innerHTML=h;
+  var nt=root.querySelector('.tabs');
+  if(nt){
+    nt.scrollLeft=tabsSX;
+    var on=nt.querySelector('button.on');
+    if(on){
+      var l=on.offsetLeft-nt.offsetLeft,r=l+on.offsetWidth;
+      if(l<nt.scrollLeft)nt.scrollLeft=l-8;
+      else if(r>nt.scrollLeft+nt.clientWidth)nt.scrollLeft=r-nt.clientWidth+8;
+    }
+  }
   if(tab==='dv'){ renderArticulosTempList(); }
   if(tab==='ct'){ ctRenderArt(); }
 }
