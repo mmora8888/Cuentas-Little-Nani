@@ -441,15 +441,11 @@ function expCreditos(){
   setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
 }
 
+function delLotes(col,ids){var ps=[];for(var i=0;i<ids.length;i+=400){var b=FS.batch();ids.slice(i,i+400).forEach(function(id){b.delete(FS.doc(P+col+'/'+id))});ps.push(b.commit())}return Promise.all(ps)}
 function deleteAllCreditos() {
   if(!confirm('⚠️ ¿Estás totalmente seguro de BORRAR TODOS los apartados? Esta acción eliminará por completo los registros actuales para que puedas importar tu archivo limpio sin duplicados.')) return;
   
-  var batch = FS.batch();
-  S.creditos.forEach(function(c){
-    batch.delete(FS.doc(P + 'creditos/' + c.id));
-  });
-
-  batch.commit().then(function(){
+  delLotes('creditos', S.creditos.map(function(c){ return c.id; })).then(function(){
     $('st').textContent = 'Se han borrado todos los apartados correctamente.';
     render();
   }).catch(function(e){
@@ -464,6 +460,7 @@ function impCreditos(el) {
   rd.onload = function() {
     var rows = csv(String(rd.result));
     var out = [];
+    var idsUsados = {};
     
     rows.slice(1).forEach(function(r) {
       var num = (r[0] || '').trim();
@@ -480,26 +477,17 @@ function impCreditos(el) {
       var nombre = (r[4] || '').trim();
       var tel = (r[5] || '').trim();
       var desc = (r[6] || '').trim();
-      var rawMonto = String(r[7] || '').trim();
-      if(rawMonto.indexOf('.')>=0 && rawMonto.indexOf(',')>=0 && rawMonto.indexOf('.') < rawMonto.indexOf(',')){
-        rawMonto=rawMonto.replace(/\./g,'').replace(',','.');
-      } else {
-        rawMonto=rawMonto.replace(',','.');
-      }
-      var monto = parseFloat(rawMonto) || 0;
-      
-      var rawPagado = String(r[8] || '').trim();
-      if(rawPagado.indexOf('.')>=0 && rawPagado.indexOf(',')>=0 && rawPagado.indexOf('.') < rawPagado.indexOf(',')){
-        rawPagado=rawPagado.replace(/\./g,'').replace(',','.');
-      } else {
-        rawPagado=rawPagado.replace(',','.');
-      }
-      var pagado = parseFloat(rawPagado) || 0;
+      var monto = parseMonto(r[7]) || 0;
+      var pagado = parseMonto(r[8]) || 0;
+      if(pagado < 0) pagado = 0;
+      if(pagado > monto) pagado = monto;
 
       if (!nombre || !(monto > 0)) return;
 
       var uniqueKey = (num ? num : '') + '|' + nombre.toLowerCase() + '|' + fecha;
-      var id = 'cr-' + hs(uniqueKey);
+      var id = 'cr-' + hs(uniqueKey), idBase = id, nId = 1;
+      while(idsUsados[id]){ nId++; id = idBase + '-' + nId; }
+      idsUsados[id] = true;
       
       out.push({
         id: id,
@@ -521,12 +509,7 @@ function impCreditos(el) {
     }
 
     if(!confirm('⚠️ Importar este archivo REEMPLAZARÁ todos los apartados actuales ('+S.creditos.length+') por los '+out.length+' del archivo. ¿Desea continuar?')){ el.value=''; return; }
-    var deleteBatch = FS.batch();
-    S.creditos.forEach(function(c){
-      deleteBatch.delete(FS.doc(P + 'creditos/' + c.id));
-    });
-
-    deleteBatch.commit().then(function(){
+    delLotes('creditos', S.creditos.map(function(c){ return c.id; })).then(function(){
       var done = 0;
       (function nx() {
         var ch = out.slice(done, done + 400);
@@ -1057,9 +1040,12 @@ function saveCreditoItem(){
   var id = edCrId || ('cr-' + hs(uniqueKey));
   if(!edCrId && S.creditos.some(function(c){ return c.id === id; })) id = id + '-' + Date.now().toString(36);
   var prevCr = edCrId ? S.creditos.filter(function(c){ return c.id === edCrId; })[0] : null;
-  if(prevCr && pagado < (prevCr.pagado||0) - 0.005){
-    $('st').textContent = 'Para reducir lo pagado usa «Deshacer abono» en Det. Ventas; así también se corrigen las ventas.';
-    return;
+  if(prevCr){
+    var regAb = S.items.filter(function(i){ return i.t === 'v' && i.ap === edCrId; }).reduce(function(x,i){ return x + (Number(i.a)||0); }, 0);
+    if(pagado < regAb - 0.005){
+      $('st').textContent = 'Lo pagado no puede ser menor a los abonos ya registrados como ventas (₡' + money(regAb) + '). Para quitar uno usa «Deshacer abono» en Det. Ventas.';
+      return;
+    }
   }
   var creditoObj = {
     id: id,
@@ -2003,8 +1989,8 @@ function resumenComparacionMes(){
   return {html:cmp('Ventas del mes',a.v,b.v)+cmp('Gastos del mes',a.g+a.f,b.g+b.f),actual:a,anterior:b,desde:iso(inicio),hasta:iso(fin)};
 }
 function resumenGraficoFlujo(){
-  var fin=today(),ini=addDays(fin,-34),weeks={};
-  for(var j=0;j<5;j++){var d=addDays(ini,j*7),w=wk(d);weeks[w]=true}
+  var fin=today(),weeks={};
+  for(var j=0;j<5;j++){weeks[addDays(wk(fin),-7*j)]=true}
   var ks=Object.keys(weeks).sort(),html='';
   ks.forEach(function(w){var hasta=addDays(w,6);if(hasta>fin)hasta=fin;var f=resumenFlujo(w,hasta),mx=Math.max(f.entradas,f.salidas,1),hi=Math.max(3,Math.round(f.entradas/mx*100)),ho=Math.max(3,Math.round(f.salidas/mx*100));html+='<div class="dash-bar-group"><div class="dash-bar in" style="height:'+hi+'%" title="Entradas '+money(f.entradas)+'"></div><div class="dash-bar out" style="height:'+ho+'%" title="Salidas '+money(f.salidas)+'"></div><span class="dash-bar-label">'+shDot(w).slice(0,5)+'</span></div>'});
   return '<div class="dash-panel"><div class="dash-bars">'+html+'</div><div class="dash-legend"><span><i style="background:#279b79"></i>Entradas registradas</span><span><i style="background:#e19a55"></i>Salidas pagadas/registradas</span></div><p class="mu">Últimas cinco semanas. Los pagos de facturas se toman por fecha de abono cuando existe historial.</p></div>';
