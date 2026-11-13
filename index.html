@@ -294,6 +294,14 @@ function csv(t){
 }
 function hs(s){var h=5381,i;for(i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return (h>>>0).toString(36)}
 function nd(s){s=String(s||'').trim();var m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);return m?m[3]+'-'+pad(+m[2])+'-'+pad(+m[1]):s}
+function parseMonto(s){
+  s=String(s||'').replace(/[^\d.,\-]/g,'');
+  var lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');
+  if(lc>=0&&ld>=0){if(lc>ld)s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'')}
+  else if(lc>=0){if(/^-?\d{1,3}(,\d{3})+$/.test(s))s=s.replace(/,/g,'');else s=s.replace(',','.')}
+  else if(ld>=0){if(/^-?\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/\./g,'')}
+  return parseFloat(s);
+}
 function imp(el){
   var fl=el.files&&el.files[0];if(!fl)return;
   var rd=new FileReader();
@@ -301,12 +309,7 @@ function imp(el){
     var rows=csv(String(rd.result)),TY={'ventas diarias':'v','ventas':'v','facturas':'f','gastos':'g'},seen={},out=[];
     rows.slice(1).forEach(function(r){
       var t=TY[(r[1]||'').trim().toLowerCase()],d=nd(r[0]),rawA=String(r[6]||'').trim();
-      if(rawA.indexOf('.')>=0 && rawA.indexOf(',')>=0 && rawA.indexOf('.') < rawA.indexOf(',')){
-        rawA=rawA.replace(/\./g,'').replace(',','.');
-      } else {
-        rawA=rawA.replace(',','.');
-      }
-      var a=parseFloat(rawA);
+      var a=parseMonto(rawA);
       if(!t||!/^\d{4}-\d\d-\d\d$/.test(d)||!(a>0))return;
       var k=[t,d,(r[2]||'').trim(),(r[3]||'').trim(),a].join('|'),n=(seen[k]=(seen[k]||0)+1),it={id:'imp-'+hs(k)+'-'+n,t:t,d:d,n:(r[2]||'').trim(),a:Math.round(a*100)/100};
       if(t==='g'&&(r[3]||'').trim()){
@@ -320,6 +323,7 @@ function imp(el){
           if(metaObj && metaObj.nombre){ it.dvMeta = metaObj; }
         } catch(err){}
       }
+      if(t==='v' && (r[8]||'').trim()){ it.ap=r[8].trim(); if((r[9]||'').trim()) it.cl=r[9].trim(); }
       out.push(it);
     });
     var tot=out.length,ex={},sk=0;
@@ -340,10 +344,10 @@ function imp(el){
 
 function exp(){
   var q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"'};
-  var rows=[['Fecha','Tipo','Detalle','Categoría','Electrónica','Cédula jurídica','Monto','DetalleVentaMeta']].concat(
+  var rows=[['Fecha','Tipo','Detalle','Categoría','Electrónica','Cédula jurídica','Monto','DetalleVentaMeta','ApartadoId','Cliente']].concat(
     S.items.slice().sort(function(a,b){return a.d<b.d?-1:1}).map(function(i){
       var metaStr = (i.t==='v' && i.dvMeta) ? JSON.stringify(i.dvMeta) : '';
-      return [shDot(i.d),TT[i.t],i.n||'',i.c||'',i.t==='f'?(i.e?'Sí':'No'):'',i.j||'',i.a,metaStr];
+      return [shDot(i.d),TT[i.t],i.n||'',i.c||'',i.t==='f'?(i.e?'Sí':'No'):'',i.j||'',i.a,metaStr,i.ap||'',i.cl||''];
     })
   );
   var b=new Blob(['\ufeff'+rows.map(function(r){return r.map(q).join(',')}).join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
@@ -359,7 +363,9 @@ function expJSON(){
     cxp: S.cxp||[],
     saldo: S.saldo,
     ahorros: S.ahorros,
-    version: '2.2',
+    cuentasBancarias: S.cuentas||{},
+    tipoCambioUSD: S.tipoCambioUSD||0,
+    version: '2.3',
     fechaExportacion: today()
   };
   var b = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json;charset=utf-8'});
@@ -402,6 +408,8 @@ function impJSON(el){
       var cfg={};
       if(typeof data.saldo==='number')cfg.saldo=data.saldo;
       if(data.ahorros)cfg.ahorros=data.ahorros;
+      if(data.cuentasBancarias&&typeof data.cuentasBancarias==='object')cfg.cuentasBancarias=data.cuentasBancarias;
+      if(typeof data.tipoCambioUSD==='number')cfg.tipoCambioUSD=data.tipoCambioUSD;
       if(Object.keys(cfg).length)ps.push(FS.doc(P+'config/main').set(cfg,{merge:true}));
       Promise.all(ps).then(function(){
         $('st').textContent='Respaldo restaurado: '+data.items.length+' movimientos, '+data.creditos.length+' apartados, '+cots.length+' cotizaciones y '+cxs.length+' cuentas por pagar.';
@@ -546,8 +554,8 @@ function impCreditos(el) {
   rd.readAsText(fl, 'text/plain');
 }
 
-function cat(a,t){a=a||S.items;
-  var cs={},k;a.forEach(function(i){if(i.t==='g'){var c=i.c||'Sin categoría';if(c==='Fondo Casa')return;cs[c]=(cs[c]||0)+i.a}});
+function cat(a,t,incl){a=a||S.items;
+  var cs={},k;a.forEach(function(i){if(i.t==='g'){var c=i.c||'Sin categoría';if(c==='Fondo Casa'&&!incl)return;cs[c]=(cs[c]||0)+i.a}});
   k=Object.keys(cs).sort(function(a,b){return cs[b]-cs[a]});
   if(!k.length)return '';
   return '<h2>'+(t||'Gastos por categoría (global)')+'</h2><div class="card">'+k.map(function(c){return '<div class="it"><div class="t">'+esc(c)+'</div><b>'+money(cs[c])+'</b></div>'}).join('')+'</div>';
@@ -565,7 +573,7 @@ function chart(ws,keys){
 function period(cards,fx){
   var a=S.items.filter(function(i){return i.d>=PF&&i.d<=PT}),f=PF.slice(0,7);
   var mv=(PF.slice(8)==='01'&&PT===iso(new Date(+f.slice(0,4),+f.slice(5),0)))?f:'';
-  return '<h2>Balance por periodo</h2><div class="card"><label class="mu">Mes</label><input type="month" value="'+mv+'" onchange="pm(this.value)"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label class="mu">Desde</label><input type="date" value="'+PF+'" onchange="pr(0,this.value)"></div><div><label class="mu">Hasta</label><input type="date" value="'+PT+'" onchange="pr(1,this.value)"></div></div></div>'+cards(sum(a, true))+'<p class="mu">'+fx(a)+'</p>'+cat(a,'Gastos por categoría del periodo');
+  return '<h2>Balance por periodo</h2><div class="card"><label class="mu">Mes</label><input type="month" value="'+mv+'" onchange="pm(this.value)"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label class="mu">Desde</label><input type="date" value="'+PF+'" onchange="pr(0,this.value)"></div><div><label class="mu">Hasta</label><input type="date" value="'+PT+'" onchange="pr(1,this.value)"></div></div></div>'+cards(sum(a, true))+'<p class="mu">'+fx(a)+'</p>'+cat(a,'Gastos por categoría del periodo',true);
 }
 function put(it){
   var k=S.items.map(function(x){return x.id}).indexOf(it.id);
@@ -676,7 +684,7 @@ function imprimirReporteProveedores(){
 function sres(){
   var jd=String(Q.j||'').replace(/\D/g,''),qq=Q.q.trim().toLowerCase(),a=parseFloat(String(Q.a).replace(',','.')),b=parseFloat(String(Q.b).replace(',','.'));
   var l=S.items.filter(function(i){return (!Q.t||i.t===Q.t)&&(!Q.c||i.c===Q.c)&&(!qq||(i.t==='f'&&(i.n||'').trim().toLowerCase()===qq))&&(isNaN(a)||i.a>=a)&&(isNaN(b)||i.a<=b)&&(!Q.f||i.d>=Q.f)&&(!Q.h||i.d<=Q.h)&&(!jd||String(i.j||'').replace(/\D/g,'')===jd)}).sort(function(x,y){return x.d<y.d?1:-1});
-  var r=sum(l),fo=l.length>0&&l.every(function(i){return i.t==='f'}),h='';
+  var r=sum(l,true),fo=l.length>0&&l.every(function(i){return i.t==='f'}),h='';
   
   if(fo){
     h='<h2>'+l.length+(l.length===1?' resultado':' resultados')+'</h2>'+tf(l);
@@ -805,7 +813,6 @@ function ahorrosSection(){
     var base=S.ahorros[s.id]||0;
     var itemsAhorro = S.items.filter(function(i){
       if(i.t!=='g'||i.c!==s.cat) return false;
-      if(s.id==='ninos' && (i.n||'').indexOf('Pago Casa')>=0) return false;
       return true;
     });
     var reg=itemsAhorro.reduce(function(acc,i){return acc+i.a},0);
@@ -860,6 +867,8 @@ function casaApartarSemana(){
   render();
 }
 
+function casaEsPago(i){return i.t==='g'&&i.c!=='Fondo Casa'&&(i.c==='Gastos Casa'||i.c==='Pago Casa'||(i.n||'').indexOf('Pago Casa')>=0)}
+function casaTotales(){var ap=0,pg=0;S.items.forEach(function(i){if(i.t!=='g')return;if(i.c==='Fondo Casa')ap+=Number(i.a)||0;else if(casaEsPago(i))pg+=Number(i.a)||0});ap=r2(ap);pg=r2(pg);return{apartado:ap,pagado:pg,disponible:r2(ap-pg)}}
 function casaLiquidarSobrante(){
   alert('La liquidación manual está deshabilitada para evitar registrar un gasto ficticio. El remanente permanece en el Fondo de la Casa.');
 }
@@ -871,9 +880,7 @@ function casaPagarRubro(nombreRubro, montoPorDefecto){
   var monto = parseFloat(String(el.value).trim().replace(',','.'));
   if(!isFinite(monto) || !(monto > 0)){ alert('Monto inválido'); return; }
 
-  var totalApartado = S.items.filter(function(i){return i.t==='g'&&i.c==='Fondo Casa'}).reduce(function(a,b){return a+b.a},0);
-  var totalGastadoCasa = S.items.filter(function(i){return i.t==='g'&&i.c==='Gastos Casa' || (i.t==='g' && i.c==='Ahorro Niños' && (i.n||'').indexOf('Pago Casa')>=0)}).reduce(function(a,b){return a+b.a},0);
-  var disponible = totalApartado - totalGastadoCasa;
+  var disponible = casaTotales().disponible;
 
   if(monto > disponible){
     if(!confirm('⚠️ El monto a pagar (₡' + money(monto) + ') supera el fondo disponible de la casa (₡' + money(disponible) + '). ¿Deseas registrarlo de todas formas?')) return;
@@ -985,9 +992,7 @@ function gastosCasaSection(){
     {nombre: 'Pastillas', monto: 8000}
   ];
 
-  var totalApartado = S.items.filter(function(i){return i.t==='g'&&i.c==='Fondo Casa'}).reduce(function(a,b){return a+b.a},0);
-  var totalPagado = S.items.filter(function(i){return i.t==='g'&&(i.c==='Gastos Casa'||(i.c==='Ahorro Niños'&&(i.n||'').indexOf('Pago Casa')>=0)||((i.n||'').indexOf('Pago Casa:')>=0))}).reduce(function(a,b){return a+b.a},0);
-  var disponible = totalApartado - totalPagado;
+  var ctc = casaTotales(), totalApartado = ctc.apartado, totalPagado = ctc.pagado, disponible = ctc.disponible;
 
   var h = '<button type="button" class="pri" style="margin-bottom:10px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="go(\'g\')">← Volver a Gastos</button>'
     + '<h2>1. Fondo de la casa</h2>'
@@ -1013,7 +1018,7 @@ function gastosCasaSection(){
   });
 
   h += '</div><h2>3. Historial de apartados y pagos de la casa</h2><div class="card">';
-  var historial = S.items.filter(function(i){return i.t==='g'&&(i.c==='Fondo Casa'||i.c==='Gastos Casa'||(i.c==='Ahorro Niños'&&(i.n||'').indexOf('Pago Casa')>=0))}).sort(function(a,b){return a.d<b.d?1:-1});
+  var historial = S.items.filter(function(i){return i.t==='g'&&(i.c==='Fondo Casa'||casaEsPago(i))}).sort(function(a,b){return a.d<b.d?1:-1});
   if(!historial.length) h += '<p class="mu">Aún no hay movimientos registrados en gastos de la casa.</p>';
   else {
     historial.slice(0,50).forEach(function(i){
@@ -1050,6 +1055,12 @@ function saveCreditoItem(){
 
   var uniqueKey = (num ? num : '') + '|' + nombre.toLowerCase() + '|' + fecha;
   var id = edCrId || ('cr-' + hs(uniqueKey));
+  if(!edCrId && S.creditos.some(function(c){ return c.id === id; })) id = id + '-' + Date.now().toString(36);
+  var prevCr = edCrId ? S.creditos.filter(function(c){ return c.id === edCrId; })[0] : null;
+  if(prevCr && pagado < (prevCr.pagado||0) - 0.005){
+    $('st').textContent = 'Para reducir lo pagado usa «Deshacer abono» en Det. Ventas; así también se corrigen las ventas.';
+    return;
+  }
   var creditoObj = {
     id: id,
     num: num,
@@ -1063,12 +1074,19 @@ function saveCreditoItem(){
   };
 
   if(DB){
-    var esNuevo = !edCrId && !S.creditos.some(function(c){ return c.id === id; });
+    var esNuevo = !edCrId;
     var bs = FS.batch();
     bs.set(FS.doc(P + 'creditos/' + id), creditoObj);
     if(esNuevo && creditoObj.pagado > 0){
       var vi = ventaAbono(creditoObj, creditoObj.pagado, fecha);
       bs.set(FS.doc(P + 'items/' + vi.id), vi);
+    }
+    if(prevCr){
+      var difPag = Math.round((creditoObj.pagado - (prevCr.pagado||0))*100)/100;
+      if(difPag > 0){
+        var vd = ventaAbono(creditoObj, difPag, today());
+        bs.set(FS.doc(P + 'items/' + vd.id), vd);
+      }
     }
     BUSY.save = true;
     setTimeout(function(){ BUSY.save = false; }, 8000);
@@ -1134,8 +1152,23 @@ function abonarCredito(id){
 
 function eliminarCredito(id){
   if(!confirm('¿Seguro que deseas eliminar este apartado?')) return;
+  var abs = S.items.filter(function(i){ return i.t === 'v' && i.ap === id; });
+  var quitar = false;
+  if(abs.length){
+    var totAb = abs.reduce(function(x,i){ return x + (Number(i.a)||0); }, 0);
+    quitar = confirm('Este apartado tiene ' + abs.length + ' abono(s) por ₡' + money(totAb) + ' registrados como ventas.\n\nAceptar = eliminarlos también de las ventas.\nCancelar = conservarlos como ventas sueltas.');
+  }
   if(DB){
-    DB.doc(P + 'creditos/' + id).delete().then(function(){
+    var delP;
+    if(quitar){
+      var bd = FS.batch();
+      bd.delete(FS.doc(P + 'creditos/' + id));
+      abs.forEach(function(i){ bd.delete(FS.doc(P + 'items/' + i.id)); });
+      delP = bd.commit();
+    } else {
+      delP = DB.doc(P + 'creditos/' + id).delete();
+    }
+    delP.then(function(){
       $('st').textContent = 'Apartado eliminado';
       render();
     }).catch(function(e){
@@ -1953,10 +1986,11 @@ function resumenFlujo(desde,hasta){
   });
   // Los abonos de facturas se cuentan en la fecha real de pago; facturas antiguas sin historial
   // de abonos se aproximan por su estado cancelado y fecha de registro.
+  S.items.forEach(function(i){if(i&&i.t==='f'&&i.d>=desde&&i.d<=hasta&&!cxGet(i.id))salidasFacturas+=Number(i.a)||0});
   (S.cxp||[]).forEach(function(c){
     var ab=c.abonos||[];
-    if(ab.length){ab.forEach(function(a){if(a.f>=desde&&a.f<=hasta)salidasFacturas+=Number(a.m)||0})}
-    else if(c.liq&&c.d>=desde&&c.d<=hasta)salidasFacturas+=Number(c.a)||0;
+    ab.forEach(function(a){if(a.f>=desde&&a.f<=hasta)salidasFacturas+=Number(a.m)||0});
+    if(c.liq&&c.d>=desde&&c.d<=hasta){var rest=r2((Number(c.a)||0)-cxPagado(c));if(rest>0)salidasFacturas+=rest}
   });
   return {entradas:entradas,salidas:salidasGastos+salidasFacturas,gastos:salidasGastos,facturas:salidasFacturas,neto:entradas-salidasGastos-salidasFacturas};
 }
@@ -1987,7 +2021,7 @@ function resumenAlertas(balanceReal){
 function summary(wi){
   var s=sum(wi,true),g=sum(S.items),totalApartadosPendientes=0;
   S.creditos.forEach(function(c){totalApartadosPendientes+=(c.monto||0)-(c.pagado||0)});
-  var porPagar=cxTot(cxPendList()).s,balanceReal=g.b+(S.saldo||0);
+  var porPagar=cxTot(cxPendList()).s,balanceReal=g.b+(S.saldo||0)+porPagar;
   var balanceProyectado=balanceReal-porPagar+totalApartadosPendientes;
   var fx=function(a){var e=0,n=0;a.forEach(function(i){if(i.t==='f'){if(i.e)e+=i.a;else n+=i.a}});return 'Facturas electrónicas '+money(e)+' · No electrónicas '+money(n)};
   var comp=resumenComparacionMes(),flujo=resumenFlujo(comp.desde,comp.hasta),cu=cuentasTotalCRC();
@@ -2013,7 +2047,7 @@ function summary(wi){
   h+=chart(ws,keys)+'<div class="dash-section"><h2>Semana por semana</h2><div class="card sc"><table><thead><tr><th>Semana</th><th>Ventas</th><th>Fact.</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>';
   keys.slice(0,16).forEach(function(w){var r=sum(ws[w],true);h+='<tr><td>'+wl(w)+'</td><td>'+money(r.v)+'</td><td>'+money(r.f)+'</td><td>'+money(r.g)+'</td><td class="'+cls(r.b)+'">'+money(r.b)+'</td></tr>'});
   h+='</tbody></table></div></div><div class="dash-section"><h2>Mes por mes</h2><div class="card sc"><table><thead><tr><th>Mes</th><th>Ventas</th><th>Fact.</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>';
-  var MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],ms={};S.items.filter(function(i){return i&&i.d}).forEach(function(i){var m=i.d.slice(0,7);(ms[m]=ms[m]||[]).push(i)});Object.keys(ms).sort().reverse().forEach(function(m){var r=sum(ms[m]);h+='<tr><td>'+MN[+m.slice(5)-1]+' '+m.slice(0,4)+'</td><td>'+money(r.v)+'</td><td>'+money(r.f)+'</td><td>'+money(r.g)+'</td><td class="'+cls(r.b)+'">'+money(r.b)+'</td></tr>'});
+  var MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],ms={};S.items.filter(function(i){return i&&i.d}).forEach(function(i){var m=i.d.slice(0,7);(ms[m]=ms[m]||[]).push(i)});Object.keys(ms).sort().reverse().forEach(function(m){var r=sum(ms[m],true);h+='<tr><td>'+MN[+m.slice(5)-1]+' '+m.slice(0,4)+'</td><td>'+money(r.v)+'</td><td>'+money(r.f)+'</td><td>'+money(r.g)+'</td><td class="'+cls(r.b)+'">'+money(r.b)+'</td></tr>'});
   h+='</tbody></table></div></div><div class="dash-section"><h2>Balance global y saldo inicial</h2><div class="dash-grid"><div class="dash-tile"><span class="label">Balance global real</span><strong>'+money(balanceReal)+'</strong></div><div class="dash-tile"><span class="label">Balance global proyectado</span><strong>'+money(balanceProyectado)+'</strong></div></div>'+saldoBox()+'</div>';
   h+='<div class="dash-section">'+cat()+'</div><div class="dash-panel"><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="pri" style="flex:1" onclick="exp()">Exportar a CSV</button><button type="button" class="pri" style="flex:1;background:var(--ac)" onclick="expJSON()">📥 Descargar Backup JSON</button></div>'
     +(RO?'':'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><label class="pri" style="flex:1;display:block;text-align:center;background:none;color:var(--tx);border:1px solid var(--bd);cursor:pointer">Importar CSV<input type="file" accept=".csv,text/csv" style="display:none" onchange="imp(this)"></label><label class="pri" style="flex:1;display:block;text-align:center;background:none;color:var(--tx);border:1px solid var(--bd);cursor:pointer">📥 Restaurar Backup JSON<input type="file" accept=".json,application/json" style="display:none" onchange="impJSON(this)"></label></div>')+'</div>';
@@ -2347,9 +2381,9 @@ function rcDatos(m){
   var cats={};g.forEach(function(i){var c=i.c||'Sin categoría';cats[c]=(cats[c]||0)+i.a});
   var provs={};f.forEach(function(i){var p=(i.n||'').trim()||'Sin proveedor',o=provs[p]||(provs[p]={ced:'',e:0,n:0});if(!o.ced&&i.j)o.ced=i.j;if(i.e)o.e+=i.a;else o.n+=i.a});
   var dias={};v.forEach(function(i){var o=dias[i.d]||(dias[i.d]={n:0,t:0});o.n++;o.t+=i.a});
-  var ah=tot(g.filter(function(i){return /^Ahorro/.test(i.c||'')}));
+  var ah=tot(g.filter(function(i){return /^Ahorro/.test(i.c||'')})),casa=tot(g.filter(function(i){return casaEsPago(i)&&!/^Ahorro/.test(i.c||'')}));
   var tv=tot(v),tf=tot(f),tg=tot(g);
-  return {m:m,v:v,f:f,g:g,tv:tv,tf:tf,tg:tg,fe:fe,fn:r2(tf-fe),cats:cats,provs:provs,dias:dias,ah:ah,bal:r2(tv-tf-tg)};
+  return {m:m,v:v,f:f,g:g,tv:tv,tf:tf,tg:tg,fe:fe,fn:r2(tf-fe),cats:cats,provs:provs,dias:dias,ah:ah,casa:casa,bal:r2(tv-tf-tg)};
 }
 function rcT(cols,rows,foot){
   var b='border-bottom:1px solid #ccc;padding:5px 4px;white-space:normal;',h='';
@@ -2375,7 +2409,7 @@ function rcHTML(m){
       ['Facturas electrónicas',M(d.fe)],
       ['Facturas no electrónicas',M(d.fn)],
       ['Total facturas',M(d.tf)],
-      ['Gastos'+(d.ah?' (incluye ahorros '+M(d.ah)+')':''),M(d.tg)]
+      ['Gastos'+((d.ah||d.casa)?' (incluye '+(d.casa?'gastos de la casa '+M(d.casa):'')+(d.casa&&d.ah?' y ':'')+(d.ah?'ahorros '+M(d.ah):'')+')':''),M(d.tg)]
     ],['Balance (ventas − facturas − gastos)','<span>'+(d.bal<0?'−':'')+M(Math.abs(d.bal))+'</span>'])
     +H('1. Ventas por día')
     +rcT([['Fecha',0],['Movimientos',1],['Monto',1]],dias.map(function(k){return [shDot(k),String(d.dias[k].n),M(r2(d.dias[k].t))]}),['Total',String(d.v.length),M(d.tv)])
@@ -2403,7 +2437,7 @@ function rcFilas(m,d){
   var o={};
   o.resumen=[['Little Nani · Reporte mensual para contabilidad'],['Mes',rcMesTxt(m)],[],['Concepto','Monto'],
     ['Ventas',d.tv],['Facturas electrónicas',d.fe],['Facturas no electrónicas',d.fn],['Total facturas',d.tf],
-    ['Gastos',d.tg],['  de los cuales ahorros',d.ah],['Balance (ventas − facturas − gastos)',d.bal]];
+    ['Gastos',d.tg],['  de los cuales ahorros',d.ah],['  de los cuales gastos de la casa',d.casa],['Balance (ventas − facturas − gastos)',d.bal]];
   o.ventas=[['Fecha','Detalle','Monto']].concat(d.v.map(function(i){return [shDot(i.d),i.n||'',i.a]}),[['Total','',d.tv]]);
   o.provs=[['Proveedor','Cédula jurídica','Electrónicas','No electrónicas','Total']].concat(
     Object.keys(d.provs).sort().map(function(p){var x=d.provs[p];return [p,x.ced,r2(x.e),r2(x.n),r2(x.e+x.n)]}),[['Total','',d.fe,d.fn,d.tf]]);
