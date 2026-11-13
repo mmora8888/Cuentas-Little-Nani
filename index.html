@@ -73,6 +73,33 @@ tfoot td{font-weight:700;border-bottom:0}
 #print-label-area{display:none}
 @page{margin:10mm}
 @media print{html,body{margin:0;padding:0;background:#fff}.lb-page:not(:last-child){break-after:page;page-break-after:always}body>*:not(#print-label-area){display:none!important}#print-label-area{display:block!important}}
+
+/* Panel financiero renovado: solo afecta la pestaña Resumen */
+.dash-hero{background:linear-gradient(135deg,#173b59,#286d78);color:#fff;border-radius:18px;padding:18px;margin:4px 0 14px;box-shadow:0 8px 22px rgba(20,55,75,.14)}
+.dash-hero .eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;opacity:.78}
+.dash-hero .amount{font-size:30px;font-weight:750;line-height:1.2;margin:5px 0}
+.dash-hero .sub{font-size:12px;opacity:.82}
+.dash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:10px 0 14px}
+.dash-tile{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:13px;min-width:0}
+.dash-tile .label{font-size:11px;color:var(--mu);display:block;margin-bottom:5px}
+.dash-tile strong{font-size:19px;display:block;overflow-wrap:anywhere}
+.dash-tile small{font-size:11px;color:var(--mu)}
+.dash-section{margin-top:18px}
+.dash-section h2{font-size:16px;color:var(--tx);font-weight:700;margin:0 0 9px}
+.dash-panel{background:var(--card);border:1px solid var(--bd);border-radius:15px;padding:13px;margin-bottom:10px}
+.dash-bars{display:flex;align-items:flex-end;gap:8px;height:142px;padding:8px 2px 0;border-bottom:1px solid var(--bd)}
+.dash-bar-group{flex:1;min-width:0;height:100%;display:flex;align-items:flex-end;justify-content:center;gap:3px;position:relative}
+.dash-bar{width: min(34%,18px);min-height:2px;border-radius:5px 5px 0 0}
+.dash-bar.in{background:#279b79}.dash-bar.out{background:#e19a55}
+.dash-bar-label{position:absolute;bottom:-20px;font-size:9px;color:var(--mu);white-space:nowrap}
+.dash-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--mu);margin-top:25px}
+.dash-legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
+.dash-alert{border-left:4px solid var(--wn);background:var(--card);padding:10px 12px;border-radius:9px;margin:7px 0;font-size:13px}
+.dash-alert.good{border-left-color:var(--ok)}.dash-alert.bad{border-left-color:var(--bad)}
+.dash-change{font-size:11px;margin-top:5px}.dash-change.up{color:var(--ok)}.dash-change.down{color:var(--bad)}
+.dash-wide{grid-column:1/-1}
+@media(min-width:560px){.dash-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.dash-tile.hero-small{grid-column:span 2}}
+
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -1909,53 +1936,83 @@ function detallesVentasSection(){
   return h;
 }
 
-function summary(wi){
-  var s=sum(wi,true),g=sum(S.items);
-  
-  var totalApartadosPendientes = 0;
-  S.creditos.forEach(function(c){
-    totalApartadosPendientes += (c.monto - c.pagado);
+function resumenMesData(desde,hasta){
+  var r={v:0,f:0,g:0};
+  S.items.forEach(function(i){if(!i||!i.d||i.d<desde||i.d>hasta)return;if(i.c==='Fondo Casa')return;if(r[i.t]!==undefined)r[i.t]+=Number(i.a)||0});
+  r.b=r.v-r.f-r.g;return r;
+}
+function resumenFlujo(desde,hasta){
+  var entradas=0,salidasGastos=0,salidasFacturas=0;
+  S.items.forEach(function(i){if(!i||!i.d||i.d<desde||i.d>hasta||i.c==='Fondo Casa')return;
+    if(i.t==='v')entradas+=Number(i.a)||0;
+    if(i.t==='g')salidasGastos+=Number(i.a)||0;
   });
-
+  // Los abonos de facturas se cuentan en la fecha real de pago; facturas antiguas sin historial
+  // de abonos se aproximan por su estado cancelado y fecha de registro.
+  (S.cxp||[]).forEach(function(c){
+    var ab=c.abonos||[];
+    if(ab.length){ab.forEach(function(a){if(a.f>=desde&&a.f<=hasta)salidasFacturas+=Number(a.m)||0})}
+    else if(c.liq&&c.d>=desde&&c.d<=hasta)salidasFacturas+=Number(c.a)||0;
+  });
+  return {entradas:entradas,salidas:salidasGastos+salidasFacturas,gastos:salidasGastos,facturas:salidasFacturas,neto:entradas-salidasGastos-salidasFacturas};
+}
+function resumenComparacionMes(){
+  var now=new Date(),inicio=new Date(now.getFullYear(),now.getMonth(),1),ayer=now.getDate();
+  var fin=new Date(now.getFullYear(),now.getMonth(),ayer),prevInicio=new Date(now.getFullYear(),now.getMonth()-1,1),prevFin=new Date(now.getFullYear(),now.getMonth()-1,Math.min(ayer,new Date(now.getFullYear(),now.getMonth(),0).getDate()));
+  var a=resumenMesData(iso(inicio),iso(fin)),b=resumenMesData(iso(prevInicio),iso(prevFin));
+  function delta(x,y){if(!y)return x?null:0;return (x-y)/Math.abs(y)*100}
+  function cmp(label,x,y){var d=delta(x,y),txt=d===null?'Sin base de comparación':(d>=0?'+':'')+d.toFixed(1)+'% vs periodo anterior';return '<div class="dash-tile"><span class="label">'+label+'</span><strong>'+money(x)+'</strong><div class="dash-change '+(d===null?'':d>=0?'up':'down')+'">'+txt+'</div><small>Anterior: '+money(y)+'</small></div>'}
+  return {html:cmp('Ventas del mes',a.v,b.v)+cmp('Gastos del mes',a.g+a.f,b.g+b.f),actual:a,anterior:b,desde:iso(inicio),hasta:iso(fin)};
+}
+function resumenGraficoFlujo(){
+  var fin=today(),ini=addDays(fin,-34),weeks={};
+  for(var j=0;j<5;j++){var d=addDays(ini,j*7),w=wk(d);weeks[w]=true}
+  var ks=Object.keys(weeks).sort(),html='';
+  ks.forEach(function(w){var hasta=addDays(w,6);if(hasta>fin)hasta=fin;var f=resumenFlujo(w,hasta),mx=Math.max(f.entradas,f.salidas,1),hi=Math.max(3,Math.round(f.entradas/mx*100)),ho=Math.max(3,Math.round(f.salidas/mx*100));html+='<div class="dash-bar-group"><div class="dash-bar in" style="height:'+hi+'%" title="Entradas '+money(f.entradas)+'"></div><div class="dash-bar out" style="height:'+ho+'%" title="Salidas '+money(f.salidas)+'"></div><span class="dash-bar-label">'+shDot(w).slice(0,5)+'</span></div>'});
+  return '<div class="dash-panel"><div class="dash-bars">'+html+'</div><div class="dash-legend"><span><i style="background:#279b79"></i>Entradas registradas</span><span><i style="background:#e19a55"></i>Salidas pagadas/registradas</span></div><p class="mu">Últimas cinco semanas. Los pagos de facturas se toman por fecha de abono cuando existe historial.</p></div>';
+}
+function resumenAlertas(balanceReal){
+  var out='',pendientes=cxPendList(),at=atrasados(),cu=cuentasTotalCRC(),dif=cu.total-balanceReal;
+  if(pendientes.length)out+='<div class="dash-alert">🧾 <b>'+pendientes.length+' cuenta(s) por pagar pendientes</b><br>Saldo pendiente registrado: '+money(cxTot(pendientes).s)+'.</div>';
+  if(at.length)out+='<div class="dash-alert">⏰ <b>'+at.length+' apartado(s) atrasado(s)</b><br>Hay clientes con saldo pendiente cuyo plazo ya venció.</div>';
+  if(cu.completo&&Math.abs(dif)>0.01)out+='<div class="dash-alert '+(dif<0?'bad':'')+'">🏦 <b>Diferencia en conciliación: '+money(dif)+'</b><br>'+(dif>0?'El dinero contado supera el balance global real.':'El dinero contado es menor que el balance global real.')+'</div>';
+  if(!cu.completo)out+='<div class="dash-alert">🏦 Completa el tipo de cambio USD → CRC en Gastos de la Casa para activar la comparación bancaria.</div>';
+  if(!out)out='<div class="dash-alert good">✓ No se detectan cuentas por pagar pendientes ni apartados atrasados. La conciliación bancaria no presenta diferencias.</div>';
+  return '<div class="dash-panel">'+out+'</div>';
+}
+function summary(wi){
+  var s=sum(wi,true),g=sum(S.items),totalApartadosPendientes=0;
+  S.creditos.forEach(function(c){totalApartadosPendientes+=(c.monto||0)-(c.pagado||0)});
+  var porPagar=cxTot(cxPendList()).s,balanceReal=g.b+(S.saldo||0)+porPagar;
+  var balanceProyectado=balanceReal-porPagar+totalApartadosPendientes;
   var fx=function(a){var e=0,n=0;a.forEach(function(i){if(i.t==='f'){if(i.e)e+=i.a;else n+=i.a}});return 'Facturas electrónicas '+money(e)+' · No electrónicas '+money(n)};
-  
-  var cards=function(r,x){
-    x=x||0;
-    var balanceReal = r.b + x;
-    return '<div class="grid">'
-      + '<div class="k"><span>Ventas</span><b>'+money(r.v)+'</b></div>'
-      + '<div class="k"><span>Facturas</span><b>'+money(r.f)+'</b></div>'
-      + '<div class="k"><span>Gastos</span><b>'+money(r.g)+'</b></div>'
-      + '<div class="k bal"><span>Balance</span><b class="'+cls(balanceReal)+'">'+money(balanceReal)+'</b></div>'
-      + '</div>';
-  };
-
-  var globalCards=function(r,x){
-    x=x||0;
-    var porPagar = cxTot(cxPendList()).s;
-    var balanceReal = r.b + x + porPagar;
-    var balanceProyectado = balanceReal - porPagar + totalApartadosPendientes;
-    return '<div class="grid">'
-      + '<div class="k"><span>Ventas</span><b>'+money(r.v)+'</b></div>'
-      + '<div class="k"><span>Facturas</span><b>'+money(r.f)+'</b></div>'
-      + '<div class="k"><span>Gastos</span><b>'+money(r.g)+'</b></div>'
-      + '<div class="k"><span>Total por Cobrar (Pendiente)</span><b class="neg">'+money(totalApartadosPendientes)+'</b></div>'
-      + '<div class="k"><span>Total por Pagar (Facturas pendientes)</span><b class="neg">'+money(porPagar)+'</b></div>'
-      + '<div class="k bal"><span>Balance global real (solo lo pagado)</span><b class="'+cls(balanceReal)+'">'+money(balanceReal)+'</b></div>'
-      + '<div class="k bal"><span>Balance global proyectado (tomando en cuenta apartados y facturas por pagar)</span><b class="'+cls(balanceProyectado)+'">'+money(balanceProyectado)+'</b></div>'
-      + '</div>'+cuentasComparacion(balanceReal);
-  };
-
-  var h=dashboardCard()+'<h2>Balance de la semana</h2>'+cards(s)+'<p class="mu">'+fx(wi)+'</p>'+period(cards,fx);
-  
-  var ws={};S.items.filter(function(i){return i&&i.d}).forEach(function(i){var w=wk(i.d);(ws[w]=ws[w]||[]).push(i)});
-  var keys=Object.keys(ws).sort().reverse();
-  h+=chart(ws,keys)+'<h2>Semana por semana</h2>';
-  if(!keys.length)return h+'<p class="mu">Aún no hay movimientos. Empieza en Ventas, Facturas o Gastos.</p><h2>Balance global</h2>'+globalCards(g,S.saldo||0)+saldoBox();
-  h+='<div class="card sc"><thead><tr><th>Semana</th><th>Ventas</th><th>Fact.</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>';
-  keys.forEach(function(w){var r=sum(ws[w],true);h+='<tr><td>'+wl(w)+'</td><td>'+money(r.v)+'</td><td>'+money(r.f)+'</td><td>'+money(r.g)+'</td><td class="'+cls(r.b)+'">'+money(r.b)+'</td></tr>'});
-  h+='</tbody></table></div><h2>Mes por mes</h2><div class="card sc"><table><thead><tr><th>Mes</th><th>Ventas</th><th>Fact.</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>';var MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],ms={};S.items.filter(function(i){return i&&i.d}).forEach(function(i){var m=i.d.slice(0,7);(ms[m]=ms[m]||[]).push(i)});Object.keys(ms).sort().reverse().forEach(function(m){var r=sum(ms[m]);h+='<tr><td>'+MN[+m.slice(5)-1]+' '+m.slice(0,4)+'</td><td>'+money(r.v)+'</td><td>'+money(r.f)+'</td><td>'+money(r.g)+'</td><td class="'+cls(r.b)+'">'+money(r.b)+'</td></tr>'});h+='</tbody></table></div><h2>Balance global</h2>'+globalCards(g,S.saldo||0)+saldoBox()+'<p class="mu">'+fx(S.items)+'</p>'+cat()+'<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="pri" style="flex:1" onclick="exp()">Exportar a CSV</button><button type="button" class="pri" style="flex:1;background:var(--ac)" onclick="expJSON()">📥 Descargar Backup JSON</button></div>'
-    +(RO?'':'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><label class="pri" style="flex:1;display:block;text-align:center;background:none;color:var(--tx);border:1px solid var(--bd);cursor:pointer">Importar CSV<input type="file" accept=".csv,text/csv" style="display:none" onchange="imp(this)"></label><label class="pri" style="flex:1;display:block;text-align:center;background:none;color:var(--tx);border:1px solid var(--bd);cursor:pointer">📥 Restaurar Backup JSON<input type="file" accept=".json,application/json" style="display:none" onchange="impJSON(this)"></label></div>');
+  var comp=resumenComparacionMes(),flujo=resumenFlujo(comp.desde,comp.hasta),cu=cuentasTotalCRC();
+  var h='<div class="dash-hero"><div class="eyebrow">Little Nani · Panel financiero</div><div class="amount">'+money(balanceReal)+'</div><div style="font-weight:650">Balance global real</div><div class="sub">Saldo inicial + movimientos registrados + facturas pendientes por pagar revertidas. No incluye el balance proyectado.</div></div>';
+  h+='<div class="dash-grid">'
+    +'<div class="dash-tile"><span class="label">Dinero en bancos y efectivo</span><strong>'+money(cu.total)+(cu.completo?'':'*')+'</strong><small>'+(cu.completo?'Saldos convertidos a CRC':'Conversión USD pendiente')+'</small></div>'
+    +'<div class="dash-tile"><span class="label">Ventas de esta semana</span><strong>'+money(s.v)+'</strong><small>Semana actual seleccionada</small></div>'
+    +'<div class="dash-tile"><span class="label">Gastos de esta semana</span><strong>'+money(s.g)+'</strong><small>Incluye Fondo Casa en vista semanal</small></div>'
+    +'<div class="dash-tile"><span class="label">Por pagar</span><strong>'+money(porPagar)+'</strong><small>Facturas pendientes registradas</small></div>'
+    +'</div>';
+  h+='<div class="dash-section"><h2>Conciliación de dinero disponible</h2><div class="dash-panel"><div class="dash-grid" style="margin:0">'
+    +'<div class="dash-tile"><span class="label">Bancos y efectivo</span><strong>'+money(cu.total)+'</strong></div>'
+    +'<div class="dash-tile"><span class="label">Balance global real</span><strong>'+money(balanceReal)+'</strong></div>'
+    +(cu.completo?'<div class="dash-tile dash-wide"><span class="label">Diferencia (dinero contado − balance real)</span><strong class="'+cls(cu.total-balanceReal)+'">'+money(cu.total-balanceReal)+'</strong></div>':'<p class="mu dash-wide">Ingresa el tipo de cambio en Gastos de la Casa para completar la comparación.</p>')
+    +'</div><p class="mu">La comparación utiliza el balance global real y no el proyectado.</p></div></div>';
+  h+='<div class="dash-section"><h2>Ventas y gastos · mes actual vs anterior</h2><div class="dash-grid">'+comp.html+'</div><p class="mu">Comparación del día 1 hasta hoy contra el mismo tramo del mes anterior. Los gastos incluyen facturas y gastos registrados.</p></div>';
+  h+='<div class="dash-section"><h2>Flujo de efectivo · mes actual</h2><div class="dash-grid"><div class="dash-tile"><span class="label">Entradas registradas</span><strong class="pos">'+money(flujo.entradas)+'</strong></div><div class="dash-tile"><span class="label">Salidas pagadas/registradas</span><strong class="neg">'+money(flujo.salidas)+'</strong></div><div class="dash-tile dash-wide"><span class="label">Flujo neto estimado del periodo</span><strong class="'+cls(flujo.neto)+'">'+money(flujo.neto)+'</strong></div></div>'+resumenGraficoFlujo()+'</div>';
+  h+='<div class="dash-section"><h2>Resultado estimado del negocio</h2><div class="dash-panel"><div class="dash-grid" style="margin:0"><div class="dash-tile"><span class="label">Ventas registradas</span><strong>'+money(comp.actual.v)+'</strong></div><div class="dash-tile"><span class="label">Facturas + gastos</span><strong>'+money(comp.actual.f+comp.actual.g)+'</strong></div><div class="dash-tile dash-wide"><span class="label">Resultado registrado (ventas − facturas − gastos)</span><strong class="'+cls(comp.actual.b)+'">'+money(comp.actual.b)+'</strong></div></div><p class="mu">Es una estimación basada en los movimientos ingresados. No equivale a utilidad neta: todavía no descuenta costo de mercancía, inventario ni impuestos no registrados.</p></div></div>';
+  h+='<div class="dash-section"><h2>Alertas y pendientes</h2>'+resumenAlertas(balanceReal)+'</div>';
+  h+='<div class="dash-section"><h2>Balance de la semana</h2><div class="dash-grid"><div class="dash-tile"><span class="label">Ventas</span><strong>'+money(s.v)+'</strong></div><div class="dash-tile"><span class="label">Facturas</span><strong>'+money(s.f)+'</strong></div><div class="dash-tile"><span class="label">Gastos</span><strong>'+money(s.g)+'</strong></div><div class="dash-tile"><span class="label">Balance semanal</span><strong class="'+cls(s.b)+'">'+money(s.b)+'</strong></div></div><p class="mu">'+fx(wi)+'</p></div>';
+  h+='<div class="dash-section"><h2>Balance por periodo</h2>'+period(function(r,x){return '<div class="dash-grid"><div class="dash-tile"><span class="label">Ventas</span><strong>'+money(r.v)+'</strong></div><div class="dash-tile"><span class="label">Facturas</span><strong>'+money(r.f)+'</strong></div><div class="dash-tile"><span class="label">Gastos</span><strong>'+money(r.g)+'</strong></div><div class="dash-tile"><span class="label">Balance</span><strong class="'+cls(r.b+(x||0))+'">'+money(r.b+(x||0))+'</strong></div></div>'},fx)+'</div>';
+  var ws={};S.items.filter(function(i){return i&&i.d}).forEach(function(i){var w=wk(i.d);(ws[w]=ws[w]||[]).push(i)});var keys=Object.keys(ws).sort().reverse();
+  h+=chart(ws,keys)+'<div class="dash-section"><h2>Semana por semana</h2><div class="card sc"><table><thead><tr><th>Semana</th><th>Ventas</th><th>Fact.</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>';
+  keys.slice(0,16).forEach(function(w){var r=sum(ws[w],true);h+='<tr><td>'+wl(w)+'</td><td>'+money(r.v)+'</td><td>'+money(r.f)+'</td><td>'+money(r.g)+'</td><td class="'+cls(r.b)+'">'+money(r.b)+'</td></tr>'});
+  h+='</tbody></table></div></div><div class="dash-section"><h2>Mes por mes</h2><div class="card sc"><table><thead><tr><th>Mes</th><th>Ventas</th><th>Fact.</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>';
+  var MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],ms={};S.items.filter(function(i){return i&&i.d}).forEach(function(i){var m=i.d.slice(0,7);(ms[m]=ms[m]||[]).push(i)});Object.keys(ms).sort().reverse().forEach(function(m){var r=sum(ms[m]);h+='<tr><td>'+MN[+m.slice(5)-1]+' '+m.slice(0,4)+'</td><td>'+money(r.v)+'</td><td>'+money(r.f)+'</td><td>'+money(r.g)+'</td><td class="'+cls(r.b)+'">'+money(r.b)+'</td></tr>'});
+  h+='</tbody></table></div></div><div class="dash-section"><h2>Balance global y saldo inicial</h2><div class="dash-grid"><div class="dash-tile"><span class="label">Balance global real</span><strong>'+money(balanceReal)+'</strong></div><div class="dash-tile"><span class="label">Balance global proyectado</span><strong>'+money(balanceProyectado)+'</strong></div></div>'+saldoBox()+'</div>';
+  h+='<div class="dash-section">'+cat()+'</div><div class="dash-panel"><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="pri" style="flex:1" onclick="exp()">Exportar a CSV</button><button type="button" class="pri" style="flex:1;background:var(--ac)" onclick="expJSON()">📥 Descargar Backup JSON</button></div>'
+    +(RO?'':'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><label class="pri" style="flex:1;display:block;text-align:center;background:none;color:var(--tx);border:1px solid var(--bd);cursor:pointer">Importar CSV<input type="file" accept=".csv,text/csv" style="display:none" onchange="imp(this)"></label><label class="pri" style="flex:1;display:block;text-align:center;background:none;color:var(--tx);border:1px solid var(--bd);cursor:pointer">📥 Restaurar Backup JSON<input type="file" accept=".json,application/json" style="display:none" onchange="impJSON(this)"></label></div>')+'</div>';
   return h;
 }
 /* ===== Comprobante de venta para el cliente ===== */
