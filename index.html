@@ -109,7 +109,7 @@ input:focus,select:focus{outline:none;border-color:var(--ac)}
 .it{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd)}
 .it:last-child{border:0;padding-bottom:2px}
 .it:first-child{padding-top:2px}
-.it .t{flex:1;min-width:0;overflow-wrap:anyword;word-break:break-word}
+.it .t{flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word}
 .it .t small{display:block;color:var(--mu);font-size:12px;margin-top:2px}
 .it button{border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:8px;padding:5px 9px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0}
 
@@ -1923,7 +1923,7 @@ function ctRenArts(){
   if(!ctArtTemp.length){c.innerHTML='<p class="mu">Sin artículos.</p>';ctTot();return}
   c.innerHTML=ctArtTemp.map(function(a,i){
     return '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap">'
-      +'<input type="text" placeholder="Descripción" value="'+esc(a.desc)+'" oninput="ctArtTemp['+i.'].desc=this.value" style="margin:0;flex:2;min-width:130px">'
+      +'<input type="text" placeholder="Descripción" value="'+esc(a.desc)+'" oninput="ctArtTemp['+i+'].desc=this.value" style="margin:0;flex:2;min-width:130px">'
       +'<input type="number" inputmode="decimal" step="0.01" placeholder="Precio" value="'+(a.precio||'')+'" oninput="ctArtTemp['+i+'].precio=parseFloat(this.value)||0;ctTot()" style="margin:0;flex:1;min-width:90px">'
       +'<button type="button" class="btn-sm bad" style="padding:9px 12px" onclick="ctQuArt('+i+')">✕</button></div>';
   }).join('');
