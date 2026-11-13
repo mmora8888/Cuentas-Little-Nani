@@ -1285,10 +1285,12 @@ function cargarMasCreditos(){
 
 function renderCreditosList(){
   var sortedCreditos = S.creditos.slice().sort(function(a, b){
+    var fa = a.fecha || '', fb = b.fecha || '';
+    if(fa !== fb) return fa < fb ? 1 : -1;
     var numA = parseInt(String(a.num || '').replace(/\D/g, '')) || 0;
     var numB = parseInt(String(b.num || '').replace(/\D/g, '')) || 0;
-    if(numA !== numB) return numA - numB;
-    return (a.fecha || '').localeCompare(b.fecha || '');
+    if(numA !== numB) return numB - numA;
+    return String(b.id || '').localeCompare(String(a.id || ''));
   });
 
   var filtered = sortedCreditos.filter(function(c){
@@ -1301,7 +1303,7 @@ function renderCreditosList(){
   });
 
   if(!filtered.length){
-    return '<div class="card"><p class="mu" style="margin:4px 0">'+(CR_Atr&&!CR_Q?'No hay apartados atrasados 🎉':'No se encontraron apartados with ese número, nombre o teléfono.')+'</p></div>';
+    return '<div class="card"><p class="mu" style="margin:4px 0">'+(CR_Atr&&!CR_Q?'No hay apartados atrasados 🎉':'No se encontraron apartados con ese número, nombre o teléfono.')+'</p></div>';
   }
 
   var paginated = filtered.slice(0, CR_Limit);
@@ -1845,6 +1847,7 @@ function deshacerAbono(id){
 }
 function abonoNombre(i){return i.cl||String(i.n||'').split(' · ').slice(1).join(' · ')||String(i.n||'Abono')}
 function renderDetallesVentasList(){
+  var _td=$('dv_total_dia');if(_td)_td.innerHTML=dvTotalDia();
   var ventasDetalladas = S.items.filter(function(i){ 
     if(i.t !== 'v' || !(i.dvMeta || i.ap)) return false;
     if(DV_Pend && !(i.dvMeta && String(i.dvMeta.guia||'').trim() && !i.dvMeta.guiaEnviada)) return false;
@@ -1903,9 +1906,12 @@ function renderDetallesVentasList(){
   return html;
 }
 
+function dvTotalDia(){
+  var dia=DV_Q||today(),t=0,n=0;
+  S.items.forEach(function(i){if(i.t==='v'&&(i.dvMeta||i.ap)&&i.d===dia){t+=Number(i.a)||0;n++}});
+  return '<span>'+(dia===today()?'Ventas de hoy':'Ventas del '+shDot(dia))+' ('+n+')</span><b class="pos">'+money(r2(t))+'</b>';
+}
 function detallesVentasSection(){
-  var ventasTodas = S.items.filter(function(i){ return i.t === 'v' && (i.dvMeta || i.ap); });
-  var totalVentasDetalladas = ventasTodas.reduce(function(acc, v){ return acc + (v.a || 0); }, 0);
   var edObj = edDvId ? S.items.filter(function(i){ return i.id === edDvId; })[0] : null;
 
   if(edObj && edObj.dvMeta && dvArticulosTemp.length === 0){
@@ -1915,7 +1921,7 @@ function detallesVentasSection(){
   var ctAb=(S.cotizaciones||[]).filter(function(c){return c.estado!=='convertida'}).length;
   var h = '<button type="button" class="pri" style="margin-bottom:10px;background:none;color:var(--tx);border:1px solid var(--bd)" onclick="go(\'ct\')">📝 Cotizaciones'+(ctAb?' ('+ctAb+' abierta'+(ctAb===1?'':'s')+')':'')+'</button>'
         + '<div class="grid">'
-        + '<div class="k bal"><span>Total Ventas Registradas (Detalladas)</span><b class="pos">'+money(totalVentasDetalladas)+'</b></div>'
+        + '<div class="k bal" id="dv_total_dia">'+dvTotalDia()+'</div>'
         + '</div>'
         + '<h2>'+(edObj ? 'Editar venta detallada' : 'Registrar nueva venta')+'</h2>'
         + '<div class="card">'
@@ -2006,7 +2012,7 @@ function resumenAlertas(balanceReal){
 }
 function summary(wi){
   var s=sum(wi,true),g=sum(S.items),totalApartadosPendientes=0;
-  S.creditos.forEach(function(c){totalApartadosPendientes+=(c.monto||0)-(c.pagado||0)});
+  S.creditos.forEach(function(c){totalApartadosPendientes+=Math.max(0,(c.monto||0)-(c.pagado||0))});
   var porPagar=cxTot(cxPendList()).s,balanceReal=g.b+(S.saldo||0)+porPagar;
   var balanceProyectado=balanceReal-porPagar+totalApartadosPendientes;
   var fx=function(a){var e=0,n=0;a.forEach(function(i){if(i.t==='f'){if(i.e)e+=i.a;else n+=i.a}});return 'Facturas electrónicas '+money(e)+' · No electrónicas '+money(n)};
@@ -2233,7 +2239,7 @@ function dashboardCard(){
     +'<div class="k"><span>Pendiente por cobrar ('+np+' apartados)</span><b class="neg">'+money(pc)+'</b></div>'
     +'<div class="k" style="grid-column:1/-1"><span>Por pagar ('+cxn+' factura'+(cxn===1?'':'s')+')</span><b class="'+(cxt>0?'neg':'')+'">'+money(cxt)+'</b></div>'
     +'</div><p class="mu">Apartados atrasados: '+atrasados().length+' · Cotizaciones abiertas: '+ca+'</p>'
-    +'<div class="card" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span class="mu" style="'+(vieja?'color:var(--bad)':'')+'">💾 '+(lb?'Último respaldo: '+shDot(lb)+(dias>0?' (hace '+dias+' day'+(dias===1?'':'s')+')':' (hoy)'):'Aún no has descargado un respaldo en este dispositivo')+'</span>'
+    +'<div class="card" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span class="mu" style="'+(vieja?'color:var(--bad)':'')+'">💾 '+(lb?'Último respaldo: '+shDot(lb)+(dias>0?' (hace '+dias+' día'+(dias===1?'':'s')+')':' (hoy)'):'Aún no has descargado un respaldo en este dispositivo')+'</span>'
     +'<button type="button" class="pri" style="width:auto;padding:8px 14px" onclick="expJSON()">Respaldar ahora</button></div>';
 }
 
