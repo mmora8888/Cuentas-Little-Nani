@@ -403,31 +403,54 @@ function exp(){
   setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
 }
 
-function expJSON(){
-  var data = {
-    items: S.items,
-    creditos: S.creditos,
-    cotizaciones: S.cotizaciones||[],
-    cxp: S.cxp||[],
-    saldo: S.saldo,
-    ahorros: S.ahorros,
-    cuentasBancarias: S.cuentas||{},
-    tipoCambioUSD: S.tipoCambioUSD||0,
-    casaMesCerrado: S.casaMesCerrado||'',
-    casaPeriodoActivo: S.casaPeriodoActivo||'',
-    casaPeriodoNombre: S.casaPeriodoNombre||'',
-    version: '2.5',
-    fechaExportacion: today()
-  };
-  var b = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json;charset=utf-8'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(b);
-  a.download = 'backup-little-nani-' + shDot(today()).replace(/\//g,'-') + '.json';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+function expDescargar(data,msg){
+  var b=new Blob([JSON.stringify(data,null,2)],{type:'application/json;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(b);
+  a.download='backup-little-nani-'+shDot(today()).replace(/\//g,'-')+'.json';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
   try{localStorage.setItem('cn_lastbackup',today())}catch(e){}
-  $('st').textContent='Respaldo descargado: '+data.items.length+' movimientos, '+data.creditos.length+' apartados, '+data.cotizaciones.length+' cotizaciones, '+data.cxp.length+' cuentas por pagar.';
+  $('st').textContent=msg;
   if(tab==='r')render();
+}
+function expArmar(items,creditos,cotizaciones,cxp,cfg,aviso){
+  cfg=cfg||{};
+  var v=0,f=0,g=0;
+  items.forEach(function(i){var a=Number(i&&i.a)||0;if(i&&i.t==='v')v+=a;else if(i&&i.t==='f')f+=a;else if(i&&i.t==='g')g+=a});
+  return {
+    app:'Little Nani',version:'3.0',fechaExportacion:today(),
+    items:items,creditos:creditos,cotizaciones:cotizaciones,cxp:cxp,
+    config:cfg,
+    saldo:cfg.saldo,ahorros:cfg.ahorros,cuentasBancarias:cfg.cuentasBancarias||{},tipoCambioUSD:cfg.tipoCambioUSD||0,
+    casaMesCerrado:cfg.casaMesCerrado||'',casaPeriodoActivo:cfg.casaPeriodoActivo||'',casaPeriodoNombre:cfg.casaPeriodoNombre||'',
+    totales:{items:items.length,creditos:creditos.length,cotizaciones:cotizaciones.length,cxp:cxp.length,ventas:r2(v),facturas:r2(f),gastos:r2(g)},
+    aviso:aviso||''
+  };
+}
+function expJSON(){
+  if(!FS||!P){$('st').textContent='No hay conexión con la base de datos: no se puede generar el respaldo.';return Promise.resolve(false)}
+  $('st').textContent='Preparando respaldo completo…';
+  var cols=['items','creditos','cotizaciones','cxp'];
+  var leer=function(opt){return Promise.all(cols.map(function(c){return FS.collection(P+c).get(opt)}).concat(FS.doc(P+'config/main').get(opt)))};
+  var aviso='';
+  return leer({source:'server'}).catch(function(){
+    aviso='Sin conexión al servidor: el respaldo usa los datos guardados en este dispositivo y podría estar incompleto.';
+    return leer({source:'cache'});
+  }).then(function(r){
+    var lista=function(q){return q.docs.map(function(d){var x=d.data();if(x.id==null)x.id=d.id;else if(x.id!==d.id)x._docId=d.id;return x})};
+    var items=lista(r[0]),cred=lista(r[1]),cots=lista(r[2]),cxs=lista(r[3]),cfg=r[4].exists?r[4].data():{};
+    var visibles=S.items.length,extra=items.length-visibles;
+    var data=expArmar(items,cred,cots,cxs,cfg,aviso);
+    expDescargar(data,(aviso?'⚠️ '+aviso+' ':'')+'Respaldo descargado con TODOS los datos: '+items.length+' movimientos'+(extra>0?' (incluye '+extra+' que la app no muestra por datos incompletos)':'')+', '+cred.length+' apartados, '+cots.length+' cotizaciones, '+cxs.length+' cuentas por pagar y la configuración completa.');
+    return true;
+  }).catch(function(e){
+    if(!S||!S.items)return false;
+    var aviso2='No se pudo leer la base de datos ('+(e&&e.message?e.message:'error')+'). Este respaldo viene de lo que muestra la pantalla y podría estar incompleto.';
+    var d=expArmar(S.items,S.creditos||[],S.cotizaciones||[],S.cxp||[],{saldo:S.saldo,ahorros:S.ahorros,cuentasBancarias:S.cuentas,tipoCambioUSD:S.tipoCambioUSD,casaMesCerrado:S.casaMesCerrado,casaPeriodoActivo:S.casaPeriodoActivo,casaPeriodoNombre:S.casaPeriodoNombre},aviso2);
+    expDescargar(d,'⚠️ '+aviso2);
+    return true;
+  });
 }
 
 function commitChunks(col,arr,pre){
@@ -435,8 +458,9 @@ function commitChunks(col,arr,pre){
   for(var i=0;i<arr.length;i+=400){
     var b=FS.batch();
     arr.slice(i,i+400).forEach(function(x){
-      if(!x.id)x.id=pre+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-      b.set(FS.doc(P+col+'/'+x.id),x);
+      var id=x._docId||x.id;if(!id)id=pre+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      var y=Object.assign({},x);delete y._docId;if(!y.id)y.id=id;
+      b.set(FS.doc(P+col+'/'+id),y);
     });
     ps.push(b.commit());
   }
@@ -449,9 +473,10 @@ function impJSON(el){
   rd.onload=function(){
     try{
       var data=JSON.parse(String(rd.result));
-      if(!data||!Array.isArray(data.items)||!Array.isArray(data.creditos)){
+      if(!data||!Array.isArray(data.items)){
         $('st').textContent='El archivo JSON no tiene un formato de respaldo válido.';el.value='';return;
       }
+      if(!Array.isArray(data.creditos))data.creditos=[];
       var cots=Array.isArray(data.cotizaciones)?data.cotizaciones:[];
       var cxs=Array.isArray(data.cxp)?data.cxp:[];
       if(!confirm('⚠️ Se cargarán en la base de datos actual: '+data.items.length+' movimientos, '+data.creditos.length+' apartados, '+cots.length+' cotizaciones y '+cxs.length+' cuentas por pagar del respaldo'+(data.fechaExportacion?' ('+shDot(data.fechaExportacion)+')':'')+'. Los registros con el mismo ID se sobrescriben; no se borra nada. ¿Continuar?')){el.value='';return;}
@@ -464,6 +489,7 @@ function impJSON(el){
       if(typeof data.casaMesCerrado==='string')cfg.casaMesCerrado=data.casaMesCerrado;
       if(typeof data.casaPeriodoActivo==='string')cfg.casaPeriodoActivo=data.casaPeriodoActivo;
       if(typeof data.casaPeriodoNombre==='string')cfg.casaPeriodoNombre=data.casaPeriodoNombre;
+      if(data.config&&typeof data.config==='object'&&!Array.isArray(data.config))cfg=Object.assign({},cfg,data.config);
       if(Object.keys(cfg).length)ps.push(FS.doc(P+'config/main').set(cfg,{merge:true}));
       Promise.all(ps).then(function(){
         $('st').textContent='Respaldo restaurado: '+data.items.length+' movimientos, '+data.creditos.length+' apartados, '+cots.length+' cotizaciones y '+cxs.length+' cuentas por pagar.';
@@ -882,11 +908,13 @@ function casaCerrarMes(){
   var m=casaMesKey();
   if(casaMesCerrado()){alert('Este mes ya está cerrado. Puedes reabrirlo si necesitas registrar movimientos.');return}
   if(!confirm('Antes de cerrar '+m+' se descargará un respaldo completo. ¿Continuar?'))return;
-  expJSON();
-  if(!confirm('Confirma el cierre de '+m+'. Los movimientos y el balance global se conservarán; solo se bloquearán nuevos registros de este mes.'))return;
-  S.casaMesCerrado=m;
-  if(DB)DB.doc(P+'config/main').set({casaMesCerrado:m},{merge:true}).then(function(){$('st').textContent='Mes cerrado correctamente';render()}).catch(function(e){S.casaMesCerrado='';$('st').textContent='No se pudo cerrar el mes: '+e.message;render()});
-  else{$('st').textContent='Mes cerrado';render()}
+  expJSON().then(function(ok){
+    if(!ok){alert('No se pudo generar el respaldo, así que el mes no se cerró. Intenta de nuevo.');return}
+    if(!confirm('Confirma el cierre de '+m+'. Los movimientos y el balance global se conservarán; solo se bloquearán nuevos registros de este mes.'))return;
+    S.casaMesCerrado=m;
+    if(DB)DB.doc(P+'config/main').set({casaMesCerrado:m},{merge:true}).then(function(){$('st').textContent='Mes cerrado correctamente';render()}).catch(function(e){S.casaMesCerrado='';$('st').textContent='No se pudo cerrar el mes: '+e.message;render()});
+    else{$('st').textContent='Mes cerrado';render()}
+  });
 }
 function casaReabrirMes(){
   var m=casaMesKey();
