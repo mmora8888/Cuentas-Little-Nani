@@ -2359,6 +2359,158 @@ function rcBox(){
     +'<button type="button" class="pri sec" onclick="expReporteContadorCSV()">📥 Descargar CSV</button></div>';
 }
 
+/* ===== FOTO DE FACTURA (OCR) ===== */
+var OCR_Busy=false,OCR_Lib=null;
+function ocrUI(t,ei){
+  if(t!=='f'||ei)return '';
+  return '<div id="ocr_box" style="margin-bottom:12px;padding:10px;border:1px dashed var(--bd);border-radius:10px">'
+    +'<div class="btn-bar" style="margin:0"><button type="button" class="pri sec" onclick="$(\'ocr_cam\').click()">📷 Tomar foto</button><button type="button" class="pri sec" onclick="$(\'ocr_gal\').click()">🖼️ Elegir imagen</button></div>'
+    +'<input id="ocr_cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="ocrFactura(this)">'
+    +'<input id="ocr_gal" type="file" accept="image/*" style="display:none" onchange="ocrFactura(this)">'
+    +'<div id="ocr_msg" class="mu" style="margin-top:8px">Toma una foto de la factura y los datos se cargan solos. Revísalos antes de registrar.</div><div id="ocr_prev"></div></div>';
+}
+function ocrCargarLib(){
+  if(window.Tesseract)return Promise.resolve();
+  if(OCR_Lib)return OCR_Lib;
+  OCR_Lib=new Promise(function(res,rej){var sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';sc.onload=res;sc.onerror=function(){OCR_Lib=null;rej(new Error('No se pudo cargar el lector de texto. Revisa tu conexión a internet.'))};document.head.appendChild(sc)});
+  return OCR_Lib;
+}
+function ocrPrep(file){
+  return new Promise(function(res,rej){
+    var url=URL.createObjectURL(file),im=new Image();
+    im.onload=function(){
+      var mx=Math.max(im.naturalWidth,im.naturalHeight),sc=mx>2000?2000/mx:(mx<1400?1600/mx:1);
+      var w=Math.round(im.naturalWidth*sc),h=Math.round(im.naturalHeight*sc),c=document.createElement('canvas');c.width=w;c.height=h;
+      var x=c.getContext('2d');x.drawImage(im,0,0,w,h);URL.revokeObjectURL(url);
+      var d=x.getImageData(0,0,w,h),p=d.data,hist=new Array(256).fill(0),i,g;
+      for(i=0;i<p.length;i+=4){g=Math.round(p[i]*0.299+p[i+1]*0.587+p[i+2]*0.114);p[i]=p[i+1]=p[i+2]=g;hist[g]++}
+      var tot=w*h,acc=0,lo=0,hi=255;
+      for(i=0;i<256;i++){acc+=hist[i];if(acc>=tot*0.02){lo=i;break}}
+      acc=0;for(i=255;i>=0;i--){acc+=hist[i];if(acc>=tot*0.02){hi=i;break}}
+      if(hi-lo<30){lo=0;hi=255}
+      var k=255/(hi-lo);
+      for(i=0;i<p.length;i+=4){g=(p[i]-lo)*k;g=g<0?0:g>255?255:g;p[i]=p[i+1]=p[i+2]=g}
+      x.putImageData(d,0,0);res(c);
+    };
+    im.onerror=function(){URL.revokeObjectURL(url);rej(new Error('No se pudo abrir la imagen.'))};
+    im.src=url;
+  });
+}
+function ocrNum(s){
+  s=String(s).replace(/[^\d.,]/g,'');if(!s)return NaN;
+  var lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');
+  if(lc>=0&&ld>=0){var dec=lc>ld?',':'.',th=dec===','?'.':',';s=s.split(th).join('').replace(dec,'.')}
+  else if(lc>=0||ld>=0){var sep=lc>=0?',':'.',pt=s.split(sep);
+    if(pt.length>2)s=pt.join('');
+    else if(pt[1].length===3)s=pt.join('');
+    else s=pt[0]+'.'+pt[1]}
+  return parseFloat(s);
+}
+function ocrNums(line){
+  var out=[],re=/\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?/g,m;
+  while((m=re.exec(line))){var v=ocrNum(m[0].replace(/\s/g,''));if(v>0&&v<1e8)out.push(v)}
+  return out;
+}
+function ocrMonto(text){
+  var L=text.split(/\n/),best=null,fuerte=null,i;
+  for(i=0;i<L.length;i++){
+    var ln=L[i];
+    if(!/total/i.test(ln)||/sub\s*-?\s*total|impuesto|\biva\b|descuento|l[ií]neas|art[ií]culos|cantidad/i.test(ln))continue;
+    var ns=ocrNums(ln);if(!ns.length&&L[i+1])ns=ocrNums(L[i+1]);
+    if(!ns.length)continue;
+    var mx=Math.max.apply(null,ns);
+    if(/total\s*(a\s*pagar|general|comprobante|factura)|monto\s*total|gran\s*total/i.test(ln))fuerte=mx;
+    best=mx;
+  }
+  if(fuerte!=null)return {v:fuerte,seguro:true};
+  if(best!=null)return {v:best,seguro:true};
+  var all=[];L.forEach(function(l){all=all.concat(ocrNums(l))});
+  if(all.length)return {v:Math.max.apply(null,all),seguro:false};
+  return null;
+}
+function ocrFecha(text){
+  var MES={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,set:9,sep:9,oct:10,nov:11,dic:12},c=[],m,t0=today(),lim=iso(new Date(new Date().getFullYear()-3,new Date().getMonth(),new Date().getDate())),mx=addDays(t0,1);
+  function add(y,mo,d,pos){y=+y;if(y<100)y+=2000;mo=+mo;d=+d;if(mo<1||mo>12||d<1||d>31)return;var s=y+'-'+(mo<10?'0':'')+mo+'-'+(d<10?'0':'')+d;if(s<lim||s>mx)return;c.push({s:s,pos:pos,f:/fecha/i.test(text.slice(Math.max(0,pos-25),pos))})}
+  var r1=/\b(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{4}|\d{2})\b/g,r2_=/\b(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\b/g,r3=/\b(\d{1,2})\s*(?:de\s*)?(ene|feb|mar|abr|may|jun|jul|ago|set|sep|oct|nov|dic)[a-z]*\.?\s*(?:de\s*|del\s*)?(\d{4}|\d{2})\b/gi;
+  while((m=r1.exec(text)))add(m[3],m[2],m[1],m.index);
+  while((m=r2_.exec(text)))add(m[1],m[2],m[3],m.index);
+  while((m=r3.exec(text)))add(m[3],MES[m[2].toLowerCase()],m[1],m.index);
+  if(!c.length)return null;
+  var pref=c.filter(function(x){return x.f})[0];
+  c.sort(function(a,b){return a.pos-b.pos});
+  return (pref||c[0]).s;
+}
+function ocrCedula(text){
+  var m=text.match(/\b3\s*[-–.]?\s*(10[1-9])\s*[-–.]?\s*(\d{6})\b/);
+  if(m)return '3-'+m[1]+'-'+m[2];
+  m=text.match(/c[eé]d(?:ula)?\.?\s*(?:jur[ií]dica)?\s*[:#]?\s*(\d[\d\s\-]{8,13}\d)/i);
+  return m?m[1].replace(/\s+/g,''):'';
+}
+function ocrProveedor(text){
+  var nt=' '+imNorm(text)+' ',best=null,seen={};
+  S.items.forEach(function(i){
+    if(!i||i.t!=='f'||!i.n)return;var k=imNorm(i.n);if(k.length<4||seen[k])return;seen[k]=1;
+    if(nt.indexOf(' '+k+' ')>=0&&(!best||k.length>best.k.length))best={k:k,n:i.n.trim(),j:(i.j||'')};
+  });
+  if(best)return {n:best.n,j:best.j,conocido:true};
+  var L=text.split(/\n/).slice(0,8),i;
+  for(i=0;i<L.length;i++){
+    var l=L[i].replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 .&,'\-]/g,' ').replace(/\s+/g,' ').trim();
+    if(l.length<4||l.length>50)continue;
+    var letras=(l.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g)||[]).length;
+    if(letras/l.length<0.6)continue;
+    if(/factura|tiquete|ticket|fecha|c[eé]dula|tel[eé]?f|www|http|@|clave|consecutivo|sucursal|caja|cliente|hora|comprobante|original/i.test(l))continue;
+    if(l===l.toUpperCase())l=l.toLowerCase().replace(/(^|\s)([a-záéíóúñ])/g,function(a,b,c){return b+c.toUpperCase()});
+    return {n:l,j:'',conocido:false};
+  }
+  return null;
+}
+function ocrMsg(h,color){var m=$('ocr_msg');if(m){m.innerHTML=h;m.style.color=color||''}}
+function ocrMarca(id,col){
+  var el=$(id);if(!el)return;
+  el.style.outline=col?'2px solid '+col:'';
+  if(col){var f=function(){el.style.outline='';el.removeEventListener('input',f)};el.addEventListener('input',f)}
+}
+function ocrFactura(inp){
+  var fl=inp.files&&inp.files[0];if(!fl)return;
+  if(OCR_Busy)return;OCR_Busy=true;
+  var pv=$('ocr_prev');if(pv)pv.innerHTML='<img alt="Foto de la factura" style="max-width:100%;max-height:160px;margin-top:8px;border-radius:8px;border:1px solid var(--bd)" src="'+URL.createObjectURL(fl)+'">';
+  ocrMsg('Cargando lector de texto…');
+  ['d','a','n','j'].forEach(function(id){ocrMarca(id,'')});
+  ocrCargarLib().then(function(){
+    ocrMsg('Preparando imagen…');return ocrPrep(fl);
+  }).then(function(cv){
+    return Tesseract.recognize(cv,'spa',{logger:function(m){
+      if(m.status==='recognizing text')ocrMsg('Leyendo la factura… '+Math.round((m.progress||0)*100)+'%');
+      else if(/loading/.test(m.status||''))ocrMsg('Descargando el idioma español (solo la primera vez)…');
+    }});
+  }).then(function(r){
+    OCR_Busy=false;inp.value='';
+    var text=(r.data&&r.data.text)||'',conf=Math.round((r.data&&r.data.confidence)||0),compact=text.replace(/\s/g,'');
+    var monto=ocrMonto(text),fecha=ocrFecha(text),prov=ocrProveedor(text),ced=ocrCedula(text);
+    var elec=/factura\s+electr[oó]nica|clave\s+num[eé]rica|comprobante\s+electr[oó]nico|\b\d{50}\b/i.test(text);
+    var det='<details style="margin-top:6px"><summary class="mu">Ver texto leído</summary><pre style="white-space:pre-wrap;font-size:11px;margin:4px 0">'+esc(text)+'</pre></details>';
+    if(conf<45||compact.length<25||(!monto&&!fecha)){
+      ocrMsg('❌ <b>No se pudo leer bien la foto</b> (legibilidad '+conf+'%). Toma otra con buena luz, sin sombras ni reflejos, con la factura plana y llenando la pantalla.'+det,'var(--bad)');
+      return;
+    }
+    var res=[],warn=false;
+    if(fecha){$('d').value=fecha;res.push('✅ Fecha '+shDot(fecha))}else{ocrMarca('d','var(--bad)');res.push('❌ Fecha no encontrada');warn=true}
+    if(monto){$('a').value=r2(monto.v);if(monto.seguro){res.push('✅ Monto ₡'+money(r2(monto.v)))}else{ocrMarca('a','var(--wn)');res.push('⚠️ Monto ₡'+money(r2(monto.v))+' (es el número más grande; confírmalo)');warn=true}}
+    else{ocrMarca('a','var(--bad)');res.push('❌ Monto no encontrado');warn=true}
+    if(prov){$('n').value=prov.n;if(prov.conocido)res.push('✅ Proveedor '+esc(prov.n));else{ocrMarca('n','var(--wn)');res.push('⚠️ Proveedor "'+esc(prov.n)+'" (confirma el nombre)');warn=true}}
+    else{ocrMarca('n','var(--bad)');res.push('❌ Proveedor no encontrado');warn=true}
+    var cf=ced||(prov&&prov.j)||'';
+    if(cf){$('j').value=cf;res.push('✅ Cédula '+esc(cf))}else res.push('➖ Cédula no encontrada (opcional)');
+    $('e').checked=!!elec;res.push(elec?'⚡ Se detectó factura electrónica':'📄 Sin clave numérica: marcada como no electrónica');
+    ocrMsg((warn?'⚠️ <b>Revisa los campos marcados</b> antes de registrar':'✅ <b>Datos cargados.</b> Revísalos y toca Registrar')+' (legibilidad '+conf+'%)<br>'+res.join('<br>')+det,warn?'var(--wn)':'var(--ok)');
+  }).catch(function(e){
+    OCR_Busy=false;inp.value='';
+    ocrMsg('❌ '+esc(e&&e.message?e.message:'No se pudo leer la foto. Intenta de nuevo.'),'var(--bad)');
+  });
+}
+/* ===== fin FOTO DE FACTURA ===== */
+
 /* ===== IMPUESTOS (Régimen Simplificado) ===== */
 var IM_D='',IM_H='',IM_Y=0,IM_ExP={},IM_ExT={},IM_Open={},IM_C=null;
 function esFondo(i){return !!i&&(i.c==='Fondo Casa'||i.c==='Fondo Impuestos')}
@@ -2650,7 +2802,7 @@ function form(t,ei){
   var el=t==='f'?'<label class="fld-lbl">Cédula jurídica</label><input id="j" placeholder="Opcional" inputmode="numeric" value="'+(ei?esc(ei.j||''):'')+'"><label class="chk"><input type="checkbox" id="e"'+(ei&&ei.e?' checked':'')+'> Factura electrónica</label>'+(ei?'':'<label class="chk"><input type="checkbox" id="cn"> Ya está pagada (no agregar a por pagar)</label>'):'';
   var lblBtn = ei ? 'Guardar cambios' : (t==='f' ? 'Registrar factura' : 'Registrar gasto');
   return '<h2>'+(ei?'Editar registro':'Registrar '+TT[t].toLowerCase().slice(0,-1))+'</h2>'
-    +'<div class="dash-panel"><div class="row-fm"><div><label class="fld-lbl">Fecha</label><input id="d" type="date" value="'+(ei?ei.d:today())+'"></div><div><label class="fld-lbl">Monto</label><input id="a" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="'+(ei?ei.a:'')+'"></div></div>'
+    +'<div class="dash-panel">'+ocrUI(t,ei)+'<div class="row-fm"><div><label class="fld-lbl">Fecha</label><input id="d" type="date" value="'+(ei?ei.d:today())+'"></div><div><label class="fld-lbl">Monto</label><input id="a" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="'+(ei?ei.a:'')+'"></div></div>'
     +'<label class="fld-lbl">'+(t==='f'?'Proveedor':'Detalle o concepto')+'</label><input id="n" placeholder="'+(t==='f'?'Nombre del proveedor':'Descripción...')+'" value="'+(ei?esc(ei.n):'')+'">'
     +cat+el+'<button class="pri" onclick="add(\''+t+'\')">'+lblBtn+'</button>'
     +(ei?'<button type="button" class="pri sec" style="margin-top:8px" onclick="ed=null;render()">Cancelar</button>':'')+'</div>';
