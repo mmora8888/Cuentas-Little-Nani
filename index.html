@@ -2362,12 +2362,12 @@ function rcBox(){
 /* ===== FOTO DE FACTURA (OCR) ===== */
 var OCR_Busy=false,OCR_Lib=null;
 function ocrUI(t,ei){
-  if(t!=='f'||ei)return '';
+  if((t!=='f'&&t!=='g')||ei)return '';
   return '<div id="ocr_box" style="margin-bottom:12px;padding:10px;border:1px dashed var(--bd);border-radius:10px">'
     +'<div class="btn-bar" style="margin:0"><button type="button" class="pri sec" onclick="$(\'ocr_cam\').click()">📷 Tomar foto</button><button type="button" class="pri sec" onclick="$(\'ocr_gal\').click()">🖼️ Elegir imagen</button></div>'
     +'<input id="ocr_cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="ocrFactura(this)">'
     +'<input id="ocr_gal" type="file" accept="image/*" style="display:none" onchange="ocrFactura(this)">'
-    +'<div id="ocr_msg" class="mu" style="margin-top:8px">Toma una foto de la factura y los datos se cargan solos. Revísalos antes de registrar.</div><div id="ocr_prev"></div></div>';
+    +'<div id="ocr_msg" class="mu" style="margin-top:8px">Toma una foto '+(t==='f'?'de la factura':'del recibo')+' y los datos se cargan solos. Revísalos antes de registrar.</div><div id="ocr_prev"></div><div id="ocr_cats"></div></div>';
 }
 function ocrCargarLib(){
   if(window.Tesseract)return Promise.resolve();
@@ -2446,10 +2446,10 @@ function ocrCedula(text){
   m=text.match(/c[eé]d(?:ula)?\.?\s*(?:jur[ií]dica)?\s*[:#]?\s*(\d[\d\s\-]{8,13}\d)/i);
   return m?m[1].replace(/\s+/g,''):'';
 }
-function ocrProveedor(text){
+function ocrProveedor(text,tipo){
   var nt=' '+imNorm(text)+' ',best=null,seen={};
   S.items.forEach(function(i){
-    if(!i||i.t!=='f'||!i.n)return;var k=imNorm(i.n);if(k.length<4||seen[k])return;seen[k]=1;
+    if(!i||i.t!==tipo||!i.n)return;var k=imNorm(i.n);if(k.length<4||seen[k])return;seen[k]=1;
     if(nt.indexOf(' '+k+' ')>=0&&(!best||k.length>best.k.length))best={k:k,n:i.n.trim(),j:(i.j||'')};
   });
   if(best)return {n:best.n,j:best.j,conocido:true};
@@ -2465,6 +2465,23 @@ function ocrProveedor(text){
   }
   return null;
 }
+function ocrCategoria(text){
+  var n=' '+imNorm(text)+' ';
+  var R=[['Gasolina',/gasolin|combustible|diesel|servicentro|estacion de servicio|\blitros?\b/],
+    ['Servicios Publicos',/\bice\b|kolbi|\baya\b|\ba y a\b|cnfl|jasec|electricidad|acueducto|telefon|internet|claro|liberty|movistar/],
+    ['Envíos',/correos de costa rica|envio|courier|dhl|fedex|encomienda|mensajeria|flete/],
+    ['Publicidad',/publicidad|imprenta|rotulo|volante|banner|impresion|facebook|meta ads|instagram|promocion/],
+    ['Entretenimiento',/cinepolis|\bcine\b|netflix|spotify|teatro|entretenimiento|diversiones|boliche/],
+    ['Comida',/restaurante|\bsoda\b|pizza|pollo|cafeteria|\bcafe\b|hamburguesa|panaderia|automercado|mas x menos|masxmenos|walmart|\bpali\b|maxipali|fresh market|perimercados|supermercado|super mercado|carniceria|verduleria|bebida|almuerzo|cena|desayuno/]],i;
+  for(i=0;i<R.length;i++){if(R[i][1].test(n)&&CATS.indexOf(R[i][0])>=0)return R[i][0]}
+  return '';
+}
+function ocrChips(sel){
+  var b=$('ocr_cats');if(!b)return;
+  var cs=CATS.filter(function(c){return c!=='Fondo Casa'&&c!=='Fondo Impuestos'});
+  b.innerHTML='<div class="mu" style="margin:8px 0 4px"><b>¿De qué es el gasto?</b></div><div style="display:flex;flex-wrap:wrap;gap:6px">'+cs.map(function(c){var on=c===sel;return '<button type="button" data-c="'+esc(c)+'" onclick="ocrCat(this.dataset.c)" style="padding:6px 11px;border-radius:99px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid '+(on?'var(--ac)':'var(--bd)')+';background:'+(on?'var(--ac)':'var(--bg)')+';color:'+(on?'var(--on)':'var(--tx)')+'">'+esc(c)+'</button>'}).join('')+'</div>';
+}
+function ocrCat(c){var s=$('c');if(!s)return;s.value=c;ocrMarca('c','');ocrChips(c)}
 function ocrMsg(h,color){var m=$('ocr_msg');if(m){m.innerHTML=h;m.style.color=color||''}}
 function ocrMarca(id,col){
   var el=$(id);if(!el)return;
@@ -2476,7 +2493,7 @@ function ocrFactura(inp){
   if(OCR_Busy)return;OCR_Busy=true;
   var pv=$('ocr_prev');if(pv)pv.innerHTML='<img alt="Foto de la factura" style="max-width:100%;max-height:160px;margin-top:8px;border-radius:8px;border:1px solid var(--bd)" src="'+URL.createObjectURL(fl)+'">';
   ocrMsg('Cargando lector de texto…');
-  ['d','a','n','j'].forEach(function(id){ocrMarca(id,'')});
+  ['d','a','n','j','c'].forEach(function(id){ocrMarca(id,'')});var cb=$('ocr_cats');if(cb)cb.innerHTML='';
   ocrCargarLib().then(function(){
     ocrMsg('Preparando imagen…');return ocrPrep(fl);
   }).then(function(cv){
@@ -2487,7 +2504,7 @@ function ocrFactura(inp){
   }).then(function(r){
     OCR_Busy=false;inp.value='';
     var text=(r.data&&r.data.text)||'',conf=Math.round((r.data&&r.data.confidence)||0),compact=text.replace(/\s/g,'');
-    var monto=ocrMonto(text),fecha=ocrFecha(text),prov=ocrProveedor(text),ced=ocrCedula(text);
+    var esF=!!$('e'),monto=ocrMonto(text),fecha=ocrFecha(text),prov=ocrProveedor(text,esF?'f':'g'),ced=esF?ocrCedula(text):'',cat=esF?'':ocrCategoria(text);
     var elec=/factura\s+electr[oó]nica|clave\s+num[eé]rica|comprobante\s+electr[oó]nico|\b\d{50}\b/i.test(text);
     var det='<details style="margin-top:6px"><summary class="mu">Ver texto leído</summary><pre style="white-space:pre-wrap;font-size:11px;margin:4px 0">'+esc(text)+'</pre></details>';
     if(conf<45||compact.length<25||(!monto&&!fecha)){
@@ -2498,11 +2515,18 @@ function ocrFactura(inp){
     if(fecha){$('d').value=fecha;res.push('✅ Fecha '+shDot(fecha))}else{ocrMarca('d','var(--bad)');res.push('❌ Fecha no encontrada');warn=true}
     if(monto){$('a').value=r2(monto.v);if(monto.seguro){res.push('✅ Monto ₡'+money(r2(monto.v)))}else{ocrMarca('a','var(--wn)');res.push('⚠️ Monto ₡'+money(r2(monto.v))+' (es el número más grande; confírmalo)');warn=true}}
     else{ocrMarca('a','var(--bad)');res.push('❌ Monto no encontrado');warn=true}
-    if(prov){$('n').value=prov.n;if(prov.conocido)res.push('✅ Proveedor '+esc(prov.n));else{ocrMarca('n','var(--wn)');res.push('⚠️ Proveedor "'+esc(prov.n)+'" (confirma el nombre)');warn=true}}
-    else{ocrMarca('n','var(--bad)');res.push('❌ Proveedor no encontrado');warn=true}
-    var cf=ced||(prov&&prov.j)||'';
-    if(cf){$('j').value=cf;res.push('✅ Cédula '+esc(cf))}else res.push('➖ Cédula no encontrada (opcional)');
-    $('e').checked=!!elec;res.push(elec?'⚡ Se detectó factura electrónica':'📄 Sin clave numérica: marcada como no electrónica');
+    if(prov){$('n').value=prov.n;if(prov.conocido)res.push('✅ '+(esF?'Proveedor ':'Detalle ')+esc(prov.n));else{ocrMarca('n','var(--wn)');res.push('⚠️ '+(esF?'Proveedor':'Detalle')+' "'+esc(prov.n)+'" (confirma el nombre)');warn=true}}
+    else if(esF){ocrMarca('n','var(--bad)');res.push('❌ Proveedor no encontrado');warn=true}
+    else res.push('➖ Detalle no encontrado (opcional)');
+    if(esF){
+      var cf=ced||(prov&&prov.j)||'';
+      if(cf){$('j').value=cf;res.push('✅ Cédula '+esc(cf))}else res.push('➖ Cédula no encontrada (opcional)');
+      $('e').checked=!!elec;res.push(elec?'⚡ Se detectó factura electrónica':'📄 Sin clave numérica: marcada como no electrónica');
+    }else{
+      if(cat&&$('c')){$('c').value=cat;ocrMarca('c','var(--wn)');res.push('⚠️ Categoría sugerida: '+esc(cat)+' (confírmala abajo)')}
+      else{ocrMarca('c','var(--wn)');res.push('⚠️ No pude deducir la categoría: elige de qué es el gasto');}
+      warn=true;ocrChips(cat);
+    }
     ocrMsg((warn?'⚠️ <b>Revisa los campos marcados</b> antes de registrar':'✅ <b>Datos cargados.</b> Revísalos y toca Registrar')+' (legibilidad '+conf+'%)<br>'+res.join('<br>')+det,warn?'var(--wn)':'var(--ok)');
   }).catch(function(e){
     OCR_Busy=false;inp.value='';
