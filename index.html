@@ -1207,6 +1207,7 @@ function deshacerEntrega(id){
     BUSY['en_'+id]=false;$('st').textContent='Entrega deshecha';
   }).catch(function(e){BUSY['en_'+id]=false;$('st').textContent='Error al deshacer entrega: '+e.message;});
 }
+function crMsg(t,ok){var m=$('cr_msg');if(m){m.textContent=t;m.style.color=ok?'':'#c0392b'}$('st').textContent=t}
 function saveCreditoItem(){
   if(BUSY.save) return;
   var num = $('cr_num').value.trim();
@@ -1219,22 +1220,19 @@ function saveCreditoItem(){
   var fecha = $('cr_fecha').value || today();
   var enBodega = !!($('cr_bodega') && $('cr_bodega').checked);
   var ubicacion = ubicLeer();
-  if($('cr_ubic').value === '__otra__' && !ubicacion){ $('st').textContent = 'Escribe el nombre de la nueva ubicación'; return; }
+  if($('cr_ubic').value === '__otra__' && !ubicacion){ crMsg('Escribe el nombre de la nueva ubicación'); return; }
 
-  if(!nombre || !(monto > 0)){ $('st').textContent = 'Indica el nombre del cliente y un monto total válido'; return; }
-  if(pagado > monto) pagado = monto;
+  if(!nombre || !(monto > 0)){ crMsg('Indica el nombre del cliente y un monto total válido'); return; }
+  if(pagado < 0){ crMsg('El total abonado no puede ser negativo'); return; }
+  if(pagado > monto + 0.005){
+    if(edCrId){ crMsg('El total abonado (₡' + money(pagado) + ') no puede ser mayor que el monto total (₡' + money(monto) + ').'); return; }
+    pagado = monto;
+  }
 
   var uniqueKey = (num ? num : '') + '|' + nombre.toLowerCase() + '|' + fecha;
   var id = edCrId || ('cr-' + hs(uniqueKey));
   if(!edCrId && S.creditos.some(function(c){ return c.id === id; })) id = id + '-' + Date.now().toString(36);
   var prevCr = edCrId ? S.creditos.filter(function(c){ return c.id === edCrId; })[0] : null;
-  if(prevCr){
-    var regAb = S.items.filter(function(i){ return i.t === 'v' && i.ap === edCrId; }).reduce(function(x,i){ return x + (Number(i.a)||0); }, 0);
-    if(pagado < regAb - 0.005 && pagado < (Number(prevCr.pagado)||0) - 0.005){
-      $('st').textContent = 'Lo pagado no puede ser menor a los abonos ya registrados como ventas (₡' + money(regAb) + '). Para quitar uno usa «Deshacer abono» en Ventas.';
-      return;
-    }
-  }
   var creditoObj = {
     id: id, num: num, nombre: nombre, tel: tel, desc: desc, plazo: plazo,
     monto: Math.round(monto * 100) / 100, pagado: Math.round(pagado * 100) / 100, fecha: fecha,
@@ -1256,70 +1254,27 @@ function saveCreditoItem(){
       if(difPag > 0){
         var vd = ventaAbono(creditoObj, difPag, today());
         bs.set(FS.doc(P + 'items/' + vd.id), vd);
+      } else if(difPag < -0.004){
+        var its = S.items.filter(function(i){ return i.t === 'v' && i.ap === edCrId; })
+          .sort(function(a, b){ return a.d === b.d ? (a.id < b.id ? 1 : -1) : (a.d < b.d ? 1 : -1); });
+        var Si = its.reduce(function(x, i){ return x + (Number(i.a)||0); }, 0);
+        var resto = Math.round(Math.min(Si, Math.max(-difPag, Si - creditoObj.pagado)) * 100) / 100;
+        its.forEach(function(i){
+          if(resto <= 0.004) return;
+          var a = Number(i.a) || 0;
+          if(a <= resto + 0.004){ bs.delete(FS.doc(P + 'items/' + i.id)); resto = Math.round((resto - a) * 100) / 100; }
+          else { bs.update(FS.doc(P + 'items/' + i.id), { a: Math.round((a - resto) * 100) / 100 }); resto = 0; }
+        });
       }
     }
     BUSY.save = true;
     setTimeout(function(){ BUSY.save = false; }, 8000);
+    crMsg('Guardando…', true);
     bs.commit().then(function(){
-      BUSY.save = false;edCrId = null;$('st').textContent = 'Apartado guardado en la base de datos';render();
-    }).catch(function(e){BUSY.save = false;$('st').textContent = 'Error al guardar: ' + e.message;});
+      BUSY.save = false;edCrId = null;render();
+      crMsg(esNuevo ? 'Apartado guardado.' : 'Cambios guardados: abonos en Ventas y saldos actualizados.', true);
+    }).catch(function(e){BUSY.save = false;crMsg('Error al guardar: ' + e.message);});
   }
-}
-function abMsg(t,ok){var m=$('abed_msg');if(m){m.textContent=t;m.style.color=ok?'':'#c0392b'}$('st').textContent=t}
-function abonosEditor(c){
-  if(!c)return '';
-  var r=abonosDe(c);
-  if(!r.l.length&&!(r.prev>0))return '<p class="mu">Este apartado aún no tiene abonos. Para agregar uno usa «Abonar» en su tarjeta.</p>';
-  var h='<div style="margin:6px 0 12px"><label class="fld-lbl">Abonos registrados: cambia el monto y pulsa Actualizar</label>';
-  r.l.forEach(function(i){
-    h+='<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><span class="mu" style="min-width:84px">'+shDot(i.d)+'</span>'
-      +'<input id="abed_'+i.id+'" inputmode="decimal" value="'+i.a+'" style="flex:1;margin:0">'
-      +'<button type="button" class="btn-sm" onclick="editarAbono(\''+i.id+'\')">Actualizar</button></div>';
-  });
-  if(r.prev>0){
-    h+='<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><span class="mu" style="min-width:84px">Anteriores</span>'
-      +'<input id="abed__prev" inputmode="decimal" value="'+r.prev+'" style="flex:1;margin:0">'
-      +'<button type="button" class="btn-sm" onclick="editarAbonoPrevio()">Actualizar</button></div>'
-      +'<div class="mu" style="font-size:12px;margin-top:2px">Los abonos anteriores no están registrados en Ventas: solo cambian el total abonado.</div>';
-  }
-  return h+'<div id="abed_msg" class="mu" style="margin-top:6px"></div></div>';
-}
-function abAplicar(cr,dif,itemId,nuevoA,okMsg){
-  var pag=Number(cr.pagado)||0,np=Math.round((pag+dif)*100)/100;
-  if(np>cr.monto+0.005){abMsg('El total abonado no puede superar el monto del apartado (₡'+money(cr.monto)+')');return}
-  if(np<-0.005){abMsg('El total abonado no puede ser negativo');return}
-  var upd={pagado:firebase.firestore.FieldValue.increment(dif)},reabre=false;
-  if(cr.entregado&&np<cr.monto-0.005){upd.entregado=false;upd.fechaEntrega='';reabre=true}
-  var b=FS.batch();
-  if(itemId)b.update(FS.doc(P+'items/'+itemId),{a:nuevoA});
-  b.update(FS.doc(P+'creditos/'+cr.id),upd);
-  var k='ea_'+(itemId||'prev_'+cr.id);
-  BUSY[k]=true;setTimeout(function(){BUSY[k]=false},8000);
-  abMsg('Guardando…',true);
-  b.commit().then(function(){BUSY[k]=false;render();abMsg(okMsg+(reabre?' El apartado ya no figura como entregado porque quedó con saldo pendiente.':''),true)})
-   .catch(function(e){BUSY[k]=false;abMsg('Error al actualizar el abono: '+e.message)});
-}
-function editarAbono(itemId){
-  if(RO||!DB||BUSY['ea_'+itemId])return;
-  var it=S.items.filter(function(x){return x.id===itemId&&x.t==='v'&&x.ap})[0];if(!it)return;
-  var cr=S.creditos.filter(function(c){return c.id===it.ap})[0];
-  if(!cr){abMsg('El apartado de este abono ya no existe');return}
-  var el=$('abed_'+itemId);if(!el)return;
-  var nuevo=Math.round(parseFloat(String(el.value).replace(',','.'))*100)/100;
-  if(!(nuevo>0)){abMsg('Escribe un monto válido. Para quitar un abono usa «Deshacer abono» en Ventas.');return}
-  var dif=Math.round((nuevo-(Number(it.a)||0))*100)/100;
-  if(Math.abs(dif)<0.005){abMsg('El monto no cambió');return}
-  abAplicar(cr,dif,itemId,nuevo,'Abono actualizado a ₡'+money(nuevo)+'. Ventas y saldo del apartado ya reflejan el cambio.');
-}
-function editarAbonoPrevio(){
-  if(RO||!DB||!edCrId)return;
-  var cr=S.creditos.filter(function(c){return c.id===edCrId})[0];if(!cr)return;
-  var el=$('abed__prev');if(!el)return;
-  var nuevo=Math.round(parseFloat(String(el.value).replace(',','.'))*100)/100;
-  if(!(nuevo>=0)){abMsg('Escribe un monto válido');return}
-  var dif=Math.round((nuevo-abonosDe(cr).prev)*100)/100;
-  if(Math.abs(dif)<0.005){abMsg('El monto no cambió');return}
-  abAplicar(cr,dif,'',0,'Abonos anteriores actualizados a ₡'+money(nuevo)+'.');
 }
 function editCredito(id){edCrId = id;render();window.scrollTo({top:0, behavior:'smooth'});}
 function cancelEditCredito(){edCrId = null;render();}
@@ -1623,11 +1578,11 @@ function creditosSection(){
         + '<label class="fld-lbl">Ubicación</label>'+ubicSelect(edObj ? edObj.ubicacion : '')
         + '<div class="row">'
         + '<div><label class="fld-lbl">Monto total</label><input id="cr_monto" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="'+(edObj ? edObj.monto : '')+'"></div>'
-        + '<div><label class="fld-lbl">'+(edObj ? 'Total abonado' : 'Abono inicial')+'</label><input id="cr_pagado" inputmode="decimal" step="0.01" min="0" placeholder="0.00"'+(edObj ? ' readonly' : '')+' value="'+(edObj ? esc(edObj.pagado||''):'')+'"></div>'
+        + '<div><label class="fld-lbl">'+(edObj ? 'Total abonado' : 'Abono inicial')+'</label><input id="cr_pagado" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="'+(edObj ? esc(edObj.pagado||''):'')+'"></div>'
         + '</div>'
-        + abonosEditor(edObj)
         + '<button class="pri" onclick="saveCreditoItem()">'+(edObj ? 'Guardar Cambios' : 'Registrar Apartado')+'</button>'
         + (edObj ? '<button class="pri sec" style="margin-top:8px" onclick="cancelEditCredito()">Cancelar</button>' : '')
+        + '<div id="cr_msg" class="mu" style="margin-top:8px"></div>'
         + '</div>'
         + '<h2>Listado de apartados</h2>'
         + '<input type="text" id="cr_search" placeholder="🔍 Buscar por número, nombre o teléfono..." value="'+esc(CR_Q)+'" oninput="filterCreditos(this)">'
