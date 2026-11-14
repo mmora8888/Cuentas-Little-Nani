@@ -315,7 +315,7 @@ function pm(v){if(!v)return;var y=+v.slice(0,4),m=+v.slice(5);PF=iso(new Date(y,
 function pr(k,v){if(!v)return;if(k)PT=v;else PF=v;if(PF>PT){if(k)PF=v;else PT=v}render()}
 
 function go(t){
-  tab=t;pend=null;ed=null;sed=false;edAh=null;edCrId=null;edDvId=null;CR_Limit=50;dvArticulosTemp=[];edCtId=null;ctArtTemp=[];edCxId=null;
+  tab=t;pend=null;ed=null;sed=false;edAh=null;edCrId=null;edDvId=null;dvTipo='';CR_Limit=50;dvArticulosTemp=[];edCtId=null;ctArtTemp=[];edCxId=null;
   render();
 }
 
@@ -1511,10 +1511,349 @@ function actualizarTotalVentaCalculado(){
   var total = subtotal + envio;
   if($('dv_total_preview')) $('dv_total_preview').textContent = '₡' + money(total);
 }
+/* ===== TRAER DATOS DE WHATSAPP (venta con envío) ===== */
+/* Provincias, cantones y distritos: Wikipedia, "Districts of Costa Rica" (división territorial administrativa). */
+var WA_GEO={
+'San José':{
+'San José':'Carmen|Merced|Hospital|Catedral|Zapote|San Francisco de Dos Ríos|Uruca|Mata Redonda|Pavas|Hatillo|San Sebastián',
+'Escazú':'Escazú|San Antonio|San Rafael',
+'Desamparados':'Desamparados|San Miguel|San Juan de Dios|San Rafael Arriba|San Antonio|Frailes|Patarrá|San Cristóbal|Rosario|Damas|San Rafael Abajo|Gravilias|Los Guido',
+'Puriscal':'Santiago|Mercedes Sur|Barbacoas|Grifo Alto|San Rafael|Candelarita|Desamparaditos|San Antonio|Chires',
+'Tarrazú':'San Marcos|San Lorenzo|San Carlos',
+'Aserrí':'Aserrí|Tarbaca|Vuelta de Jorco|San Gabriel|Legua|Monterrey|Salitrillos',
+'Mora':'Colón|Guayabo|Tabarcia|Piedras Negras|Picagres|Jaris|Quitirrisí',
+'Goicoechea':'Guadalupe|San Francisco|Calle Blancos|Mata de Plátano|Ipís|Rancho Redondo|Purral',
+'Santa Ana':'Santa Ana|Salitral|Pozos|Uruca|Piedades|Brasil',
+'Alajuelita':'Alajuelita|San Josecito|San Antonio|Concepción|San Felipe',
+'Vázquez de Coronado':'San Isidro|San Rafael|Dulce Nombre de Jesús|Patalillo|Cascajal',
+'Acosta':'San Ignacio|Guaitil|Palmichal|Cangrejal|Sabanillas',
+'Tibás':'San Juan|Cinco Esquinas|Anselmo Llorente|León XIII|Colima',
+'Moravia':'San Vicente|San Jerónimo|La Trinidad',
+'Montes de Oca':'San Pedro|Sabanilla|Mercedes|San Rafael',
+'Turrubares':'San Pablo|San Pedro|San Juan de Mata|San Luis|Carara',
+'Dota':'Santa María|Jardín|Copey',
+'Curridabat':'Curridabat|Granadilla|Sánchez|Tirrases',
+'Pérez Zeledón':'San Isidro de El General|El General|Daniel Flores|Rivas|San Pedro|Platanares|Pejibaye|Cajón|Barú|Río Nuevo|Páramo|La Amistad',
+'León Cortés Castro':'San Pablo|San Andrés|Llano Bonito|San Isidro|Santa Cruz|San Antonio'
+},
+'Alajuela':{
+'Alajuela':'Alajuela|San José|Carrizal|San Antonio|Guácima|San Isidro|Sabanilla|San Rafael|Río Segundo|Desamparados|Turrúcares|Tambor|Garita|Sarapiquí',
+'San Ramón':'San Ramón|Santiago|San Juan|Piedades Norte|Piedades Sur|San Rafael|San Isidro|Ángeles|Alfaro|Volio|Concepción|Zapotal|Peñas Blancas|San Lorenzo',
+'Grecia':'Grecia|San Isidro|San José|San Roque|Tacares|Puente de Piedra|Bolívar',
+'San Mateo':'San Mateo|Desmonte|Jesús María|Labrador',
+'Atenas':'Atenas|Jesús|Mercedes|San Isidro|Concepción|San José|Santa Eulalia|Escobal',
+'Naranjo':'Naranjo|San Miguel|San José|Cirrí Sur|San Jerónimo|San Juan|El Rosario|Palmitos',
+'Palmares':'Palmares|Zaragoza|Buenos Aires|Santiago|Candelaria|Esquipulas|La Granja',
+'Poás':'San Pedro|San Juan|San Rafael|Carrillos|Sabana Redonda',
+'Orotina':'Orotina|El Mastate|Hacienda Vieja|Coyolar|La Ceiba',
+'San Carlos':'Quesada|Florencia|Buenavista|Aguas Zarcas|Venecia|Pital|La Fortuna|La Tigra|La Palmera|Venado|Cutris|Monterrey|Pocosol',
+'Zarcero':'Zarcero|Laguna|Tapesco|Guadalupe|Palmira|Zapote|Brisas',
+'Sarchí':'Sarchí Norte|Sarchí Sur|Toro Amarillo|San Pedro|Rodríguez',
+'Upala':'Upala|Aguas Claras|San José|Bijagua|Delicias|Dos Ríos|Yolillal|Canalete',
+'Los Chiles':'Los Chiles|Caño Negro|El Amparo|San Jorge',
+'Guatuso':'San Rafael|Buenavista|Cote|Katira',
+'Río Cuarto':'Río Cuarto|Santa Rita|Santa Isabel'
+},
+'Cartago':{
+'Cartago':'Oriental|Occidental|Carmen|San Nicolás|Aguacaliente|Guadalupe|Corralillo|Tierra Blanca|Dulce Nombre|Llano Grande|Quebradilla',
+'Paraíso':'Paraíso|Santiago|Orosi|Cachí|Llanos de Santa Lucía|Birrisito',
+'La Unión':'Tres Ríos|San Diego|San Juan|San Rafael|Concepción|Dulce Nombre|San Ramón|Río Azul',
+'Jiménez':'Juan Viñas|Tucurrique|Pejibaye|La Victoria',
+'Turrialba':'Turrialba|La Suiza|Peralta|Santa Cruz|Santa Teresita|Pavones|Tuis|Tayutic|Santa Rosa|Tres Equis|La Isabel|Chirripó',
+'Alvarado':'Pacayas|Cervantes|Capellades',
+'Oreamuno':'San Rafael|Cot|Potrero Cerrado|Cipreses|Santa Rosa',
+'El Guarco':'El Tejar|San Isidro|Tobosi|Patio de Agua'
+},
+'Heredia':{
+'Heredia':'Heredia|Mercedes|San Francisco|Ulloa|Varablanca',
+'Barva':'Barva|San Pedro|San Pablo|San Roque|Santa Lucía|San José de la Montaña|Puente Salas',
+'Santo Domingo':'Santo Domingo|San Vicente|San Miguel|Paracito|Santo Tomás|Santa Rosa|Tures|Pará',
+'Santa Bárbara':'Santa Bárbara|San Pedro|San Juan|Jesús|Santo Domingo|Purabá',
+'San Rafael':'San Rafael|San Josecito|Santiago|Ángeles|Concepción',
+'San Isidro':'San Isidro|San José|Concepción|San Francisco',
+'Belén':'San Antonio|La Ribera|La Asunción',
+'Flores':'San Joaquín|Barrantes|Llorente',
+'San Pablo':'San Pablo|Rincón de Sabanilla',
+'Sarapiquí':'Puerto Viejo|La Virgen|Las Horquetas|Llanuras del Gaspar|Cureña'
+},
+'Guanacaste':{
+'Liberia':'Liberia|Cañas Dulces|Mayorga|Nacascolo|Curubandé',
+'Nicoya':'Nicoya|Mansión|San Antonio|Quebrada Honda|Sámara|Nosara|Belén de Nosarita',
+'Santa Cruz':'Santa Cruz|Bolsón|Veintisiete de Abril|Tempate|Cartagena|Cuajiniquil|Diriá|Cabo Velas|Tamarindo',
+'Bagaces':'Bagaces|La Fortuna|Mogote|Río Naranjo',
+'Carrillo':'Filadelfia|Palmira|Sardinal|Belén',
+'Cañas':'Cañas|Palmira|San Miguel|Bebedero|Porozal',
+'Abangares':'Las Juntas|Sierra|San Juan|Colorado',
+'Tilarán':'Tilarán|Quebrada Grande|Tronadora|Santa Rosa|Líbano|Tierras Morenas|Arenal|Cabeceras',
+'Nandayure':'Carmona|Santa Rita|Zapotal|San Pablo|Porvenir|Bejuco',
+'La Cruz':'La Cruz|Santa Cecilia|La Garita|Santa Elena',
+'Hojancha':'Hojancha|Monte Romo|Puerto Carrillo|Huacas|Matambú'
+},
+'Puntarenas':{
+'Puntarenas':'Puntarenas|Pitahaya|Chomes|Lepanto|Paquera|Manzanillo|Guacimal|Barranca|Isla del Coco|Cóbano|Chacarita|Chira|Acapulco|El Roble|Arancibia',
+'Esparza':'Espíritu Santo|San Juan Grande|Macacona|San Rafael|San Jerónimo|Caldera',
+'Buenos Aires':'Buenos Aires|Volcán|Potrero Grande|Boruca|Pilas|Colinas|Chánguena|Biolley|Brunka',
+'Montes de Oro':'Miramar|La Unión|San Isidro',
+'Osa':'Puerto Cortés|Palmar|Sierpe|Bahía Ballena|Piedras Blancas|Bahía Drake',
+'Quepos':'Quepos|Savegre|Naranjito',
+'Golfito':'Golfito|Guaycará|Pavón',
+'Coto Brus':'San Vito|Sabalito|Aguabuena|Limoncito|Pittier|Gutiérrez Braun',
+'Parrita':'Parrita',
+'Corredores':'Corredor|La Cuesta|Canoas|Laurel',
+'Garabito':'Jacó|Tárcoles',
+'Monteverde':'Monteverde',
+'Puerto Jiménez':'Puerto Jiménez'
+},
+'Limón':{
+'Limón':'Limón|Valle La Estrella|Río Blanco|Matama',
+'Pococí':'Guápiles|Jiménez|Rita|Roxana|Cariari|Colorado|La Colonia',
+'Siquirres':'Siquirres|Pacuarito|Florida|Germania|El Cairo|Alegría|Reventazón',
+'Talamanca':'Bratsi|Sixaola|Cahuita|Telire',
+'Matina':'Matina|Batán|Carrandi',
+'Guácimo':'Guácimo|Mercedes|Pocora|Río Jiménez|Duacarí'
+}
+};
+var WA_CANT=null,WA_PROV=null,WA_DIST=null;
+var WA_NO=' casa frente metros metro mts mt norte sur este oeste esquina costado diagonal entrada porton edificio apartamento apto condominio residencial barrio urbanizacion calle avenida ruta detras contiguo local iglesia escuela colegio super supermercado gasolinera banco parque plaza centro cerca lado antes despues altos bajos oficina bodega entre cuadra cuadras carretera rotonda mano derecha izquierda numero lote casita ';
+var WA_FALLBACK_NO=' mora flores osa la cruz ';
+function waNorm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
+function waGeoInit(){
+  if(WA_CANT)return;
+  WA_CANT=[];WA_PROV={};WA_DIST={};
+  Object.keys(WA_GEO).forEach(function(p){
+    WA_PROV[waNorm(p)]=p;
+    Object.keys(WA_GEO[p]).forEach(function(cn){
+      var c={n:cn,p:p,k:waNorm(cn),dk:{}};
+      WA_GEO[p][cn].split('|').forEach(function(dn){
+        var dk=waNorm(dn);c.dk[dk]=dn;
+        (WA_DIST[dk]=WA_DIST[dk]||[]).push({n:dn,c:c});
+      });
+      WA_CANT.push(c);
+    });
+  });
+  var al={'coronado':'Vázquez de Coronado','valverde vega':'Sarchí','leon cortes':'León Cortés Castro','guarco':'El Guarco','alfaro ruiz':'Zarcero'};
+  Object.keys(al).forEach(function(k){
+    var c=WA_CANT.filter(function(x){return x.n===al[k]})[0];
+    if(c)WA_CANT.push({n:c.n,p:c.p,k:k,dk:c.dk});
+  });
+}
+function waCant(k){for(var i=0;i<WA_CANT.length;i++)if(WA_CANT[i].k===k)return WA_CANT[i];return null}
+function waDistDe(c,k){return c&&c.dk[k]?c.dk[k]:''}
+function waGeoExacto(s){var k=waNorm(s);return !!(WA_PROV[k]||waCant(k))}
+function waTitulo(s){
+  s=String(s||'').trim().replace(/\s+/g,' ');
+  if(s!==s.toUpperCase()&&s!==s.toLowerCase())return s;
+  var low=' de del la las los y e ';
+  return s.toLowerCase().split(' ').map(function(w,i){
+    if(i>0&&low.indexOf(' '+w+' ')>=0)return w;
+    return w.charAt(0).toUpperCase()+w.slice(1);
+  }).join(' ');
+}
+function waTel(line){
+  var re=/(?:\+?506[\s\-.]?)?([2-8]\d{3})[\s\-.]?(\d{4})/g,m;
+  while((m=re.exec(line))){
+    var prev=line.charAt(m.index-1),nxt=line.charAt(m.index+m[0].length);
+    if(/\d/.test(nxt))continue;
+    if(/\d/.test(prev)&&m[0].replace(/\D/g,'').length===8)continue;
+    return {tel:m[1]+'-'+m[2],i:m.index,len:m[0].length};
+  }
+  return null;
+}
+function waPalabrasOk(s){
+  var k=waNorm(s),w=k?k.split(' '):[];
+  for(var i=0;i<w.length;i++)if(WA_NO.indexOf(' '+w[i]+' ')>=0)return false;
+  return true;
+}
+function waEsNombre(s){
+  if(!/^[\p{L}][\p{L}\s.'’\-]{3,48}$/u.test(s))return false;
+  var w=s.trim().split(/\s+/);
+  if(w.length<2||w.length>5)return false;
+  return waPalabrasOk(s)&&!waGeoExacto(s);
+}
+function waEsDistrito(s){
+  if(!/^[\p{L}][\p{L}\s.'’\-]{1,40}$/u.test(s))return false;
+  return s.trim().split(/\s+/).length<=3&&waPalabrasOk(s);
+}
+function waParse(raw){
+  waGeoInit();
+  var txt=String(raw||'').replace(/\r/g,'\n').replace(/[\u00a0\u200e\u200f\u202f]/g,' ').replace(/[^\p{L}\p{N}\s,.;:\-+\/()#@'’]/gu,' ');
+  var r={nombre:'',tel:'',provincia:'',canton:'',distrito:'',otros:'',f:{}};
+  var otros=[],prov='',provOk=true,cant=null,cantRaw='',dist='',distLab=false,distOk=false,prev='';
+  txt.split('\n').forEach(function(l0){
+    var l=l0.trim(),m;
+    l=l.replace(/^\[?\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?\s?m\.?)?\]?\s*[-–]?\s*[^:]{1,40}:\s*/i,'');
+    if(!l||/^\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?\s?m\.?)?$/i.test(l))return;
+    l=l.replace(/^(hola|buen[oa]s(?:\s+(?:d[ií]as|tardes|noches))?|saludos)[\s,!.:;\-]*/i,'').trim();
+    if(!l)return;
+    if(/^(muchas\s+)?gracias\b|^por\s+favor\b|^favor\b|^(mis|los)?\s*datos\b[^,]*:?\s*$/i.test(l)&&!/\d/.test(l))return;
+    if(/^c[eé]d(?:ula)?\b/i.test(l)&&/\d/.test(l))return;
+    var t=waTel(l);
+    if(t&&!r.tel){
+      r.tel=t.tel;
+      l=(l.slice(0,t.i)+' '+l.slice(t.i+t.len)).replace(/\b(tel[eé]fono|tel|cel(?:ular)?|whatsapp|wasap|contacto|n[uú]mero)\b\s*[:\-.]?/ig,' ').replace(/\s+/g,' ').replace(/^[\s,;:\-]+|[\s,;:\-]+$/g,'');
+    }
+    if(!l)return;
+    if((m=l.match(/^(?:nombre(?:\s+y\s+apellidos?|\s+completo)?|a\s+nombre\s+de|cliente|destinatari[oa]|recibe|persona\s+que\s+recibe)\s*[:\-]\s*(.+)$/i))){
+      r.nombre=waTitulo(m[1]);r.f.nombre='ok';return;
+    }
+    l=l.replace(/^(?:direcci[oó]n(?:\s+exacta)?|se[ñn]as|otras\s+se[ñn]as|ubicaci[oó]n|lugar\s+de\s+entrega)\s*[:\-]\s*/i,'');
+    var segs=l.split(/\s*[,;]\s*/).filter(Boolean);
+    if(segs.length===1&&!r.nombre&&waEsNombre(segs[0])){r.nombre=waTitulo(segs[0]);r.f.nombre='ok';return}
+    if(segs.length>1&&!r.nombre){
+      var w0=segs[0].split(/\s+/);
+      for(var n0=Math.min(3,w0.length-2);n0>=1;n0--){
+        var suf=w0.slice(-n0).join(' ');
+        if(waGeoExacto(suf)){var rest=w0.slice(0,-n0).join(' ');if(waEsNombre(rest))segs=[rest,suf].concat(segs.slice(1));break}
+      }
+    }
+    segs.forEach(function(sg,si){
+      var s=sg.trim(),kind='',v=s,k,mm,A,B,cb,pb,ca,dd;
+      if(si===0&&segs.length>1&&!r.nombre&&waEsNombre(s)){r.nombre=waTitulo(s);r.f.nombre='ok';return}
+      if((mm=s.match(/^(provincia|cant[oó]n|distrito)\s*(?::|-|\bde\b)?\s*(.+)$/i))){kind=waNorm(mm[1]);v=mm[2].trim()}
+      k=waNorm(v);if(!k)return;
+      if(kind==='provincia'){if(WA_PROV[k])prov=WA_PROV[k];else{prov=waTitulo(v);provOk=false}prev='prov';return}
+      if(kind==='canton'){var c0=waCant(k);if(c0)cant=c0;else cantRaw=waTitulo(v);prev='cant';return}
+      if(kind==='distrito'){
+        dd=cant?waDistDe(cant,k):'';
+        dist=dd||waTitulo(v);distLab=true;distOk=!!dd;prev='dist';return;
+      }
+      if((mm=v.match(/^(.+)\s+de\s+(.+)$/i))){
+        A=mm[1].trim();B=mm[2].trim();pb=WA_PROV[waNorm(B)];cb=waCant(waNorm(B));ca=waCant(waNorm(A));
+        var ka=waNorm(A);
+        if(cb&&waDistDe(cb,ka)&&!dist&&(!cant||cant.k===cb.k)){dist=waDistDe(cb,ka);distOk=true;if(!cant)cant=cb;prev='dist';return}
+        if(pb&&!dist&&!cant&&WA_DIST[ka]){
+          var inP=WA_DIST[ka].filter(function(x){return x.c.p===pb});
+          if(inP.length===1){dist=inP[0].n;distOk=true;cant=inP[0].c;if(!prov)prov=pb;prev='dist';return}
+        }
+        if(pb&&ca&&ca.p===pb&&!cant){cant=ca;if(!prov)prov=pb;prev='cant';return}
+        if(cb&&waEsDistrito(A)&&!dist&&(!cant||cant.k===cb.k)){dist=waTitulo(A);if(!cant)cant=cb;prev='dist';return}
+      }
+      if(!prov&&WA_PROV[k]){prov=WA_PROV[k];prev='prov';return}
+      var c1=waCant(k);
+      if(c1&&!cant){cant=c1;prev='cant';return}
+      if(cant&&!dist){
+        dd=waDistDe(cant,k);
+        if(dd){dist=dd;distOk=true;prev='dist';return}
+        if(prev==='cant'&&waEsDistrito(v)){dist=waTitulo(v);prev='dist';return}
+      }
+      if(!cant&&!dist&&WA_DIST[k]){
+        var cand=WA_DIST[k].filter(function(x){return !prov||x.c.p===prov});
+        if(cand.length===1){cant=cand[0].c;dist=cand[0].n;distOk=true;if(!prov)prov=cant.p;prev='dist';return}
+      }
+      otros.push(v);prev='';
+    });
+  });
+  if(!cant&&!cantRaw){
+    var base=' '+waNorm(otros.join(' '))+' ',best=null,bi=1e9;
+    WA_CANT.forEach(function(c){
+      if(WA_FALLBACK_NO.indexOf(' '+c.k+' ')>=0)return;
+      if(prov&&c.p!==prov)return;
+      var ix=base.indexOf(' '+c.k+' ');
+      if(ix>=0&&ix<bi){best=c;bi=ix}
+    });
+    if(best){cant=best;r.f.canton='?'}
+  }
+  if(cant){
+    r.canton=cant.n;if(!r.f.canton)r.f.canton='ok';
+    if(!prov){prov=cant.p;if(r.f.canton==='?')r.f.provincia='?'}
+    else if(waNorm(prov)!==waNorm(cant.p))r.f.provincia='?';
+  }else if(cantRaw){r.canton=cantRaw;r.f.canton='?'}
+  r.provincia=prov;if(prov&&!r.f.provincia)r.f.provincia=provOk?'ok':'?';
+  if(!dist){
+    var md=otros.join(', ').match(/distrito\s+(?:de\s+)?(\p{L}+(?:\s+(?!en\b|de\b|del\b|frente\b|cerca\b)\p{L}+)?)/iu);
+    if(md){var kk=waNorm(md[1]);var d2=cant?waDistDe(cant,kk):'';dist=d2||waTitulo(md[1]);distOk=!!d2}
+  }
+  if(!dist&&cant){
+    var b2=' '+waNorm(otros.join(' '))+' ',hit=[];
+    Object.keys(cant.dk).forEach(function(dk){if(b2.indexOf(' '+dk+' ')>=0)hit.push(dk)});
+    if(hit.length===1){dist=cant.dk[hit[0]]}
+  }
+  r.distrito=dist;if(dist)r.f.distrito=(distLab||distOk)?'ok':'?';
+  r.otros=otros.map(function(x){return x.trim()}).filter(Boolean).join(', ').replace(/[\s,.;:\-]+$/,'');
+  return r;
+}
+function waMsgModal(h,color){var m=$('wa_msg');if(m){m.innerHTML=h;m.style.color=color||''}}
+function waCerrar(){var m=$('wa_modal');if(m)m.remove()}
+function waAbrir(){
+  if(dvTipo!=='envio')return;
+  waCerrar();
+  var m=document.createElement('div');m.id='wa_modal';m.className='lbm';
+  m.onclick=function(e){if(e.target===m)waCerrar()};
+  m.innerHTML='<div><b style="font-size:17px">Traer datos del cliente</b>'
+    +'<span class="mu">Pega el mensaje de WhatsApp con sus datos, o toma una foto o elige una captura. Se reconocen y se llenan solos; luego los revisas.</span>'
+    +'<textarea id="wa_txt" rows="6" placeholder="Pega aquí el mensaje del cliente…" onpaste="setTimeout(waLeer,80)" style="width:100%;margin:8px 0;padding:10px 11px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit;font-size:14.5px;resize:vertical"></textarea>'
+    +'<div id="wa_msg" class="mu" style="margin-bottom:8px"></div>'
+    +'<div class="bt" style="margin-bottom:8px"><button type="button" class="pri" onclick="waPegar()">📋 Pegar y reconocer</button><button type="button" class="pri sec" onclick="waLeer()">Reconocer texto</button></div>'
+    +'<div class="bt" style="margin-bottom:8px"><button type="button" class="pri sec" onclick="$(\'wa_cam\').click()">📷 Tomar foto</button><button type="button" class="pri sec" onclick="$(\'wa_gal\').click()">🖼️ Elegir imagen</button></div>'
+    +'<input id="wa_cam" type="file" accept="image/*" capture="environment" style="display:none" onchange="waFoto(this)">'
+    +'<input id="wa_gal" type="file" accept="image/*" style="display:none" onchange="waFoto(this)">'
+    +'<button type="button" class="pri sec" onclick="waCerrar()">Cerrar</button></div>';
+  document.body.appendChild(m);
+}
+function waPegar(){
+  if(!navigator.clipboard||!navigator.clipboard.readText){waMsgModal('Tu navegador no permite leer el portapapeles: mantén presionado en el cuadro de texto y elige Pegar.','var(--wn)');return}
+  navigator.clipboard.readText().then(function(t){var ta=$('wa_txt');if(ta)ta.value=t||'';waLeer()}).catch(function(){
+    waMsgModal('No se pudo leer el portapapeles: mantén presionado en el cuadro de texto y elige Pegar.','var(--wn)');
+  });
+}
+function waLeer(){
+  var ta=$('wa_txt');if(!ta)return;
+  var txt=ta.value;
+  if(!txt.trim()){waMsgModal('Pega primero el mensaje del cliente.','var(--wn)');return}
+  var r=waParse(txt);
+  if(!r.nombre&&!r.tel&&!r.provincia&&!r.canton){
+    waMsgModal('❌ No encontré datos de cliente en ese texto. Revisa que incluya nombre, teléfono y dirección.','var(--bad)');return;
+  }
+  waAplicar(r,txt);waCerrar();
+}
+function waAplicar(r,txt){
+  var ids={nombre:'dv_nombre',tel:'dv_tel',provincia:'dv_provincia',canton:'dv_canton',distrito:'dv_distrito',otros:'dv_otros'};
+  Object.keys(ids).forEach(function(k){
+    var el=$(ids[k]);if(!el)return;
+    if(r[k])el.value=r[k];
+    ocrMarca(ids[k],(r[k]&&r.f[k]==='?')?'var(--wn)':'');
+  });
+  if(!r.nombre)ocrMarca('dv_nombre','var(--bad)');
+  var l=[];
+  l.push(r.nombre?'✅ Nombre: '+esc(r.nombre):'❌ Nombre no encontrado: escríbelo');
+  l.push(r.tel?'✅ Teléfono: '+esc(r.tel):'➖ Teléfono no encontrado');
+  l.push(r.provincia?(r.f.provincia==='?'?'⚠️ Provincia: '+esc(r.provincia)+' (revísala)':'✅ Provincia: '+esc(r.provincia)):'➖ Provincia no encontrada');
+  l.push(r.canton?(r.f.canton==='?'?'⚠️ Cantón: '+esc(r.canton)+' (revísalo)':'✅ Cantón: '+esc(r.canton)):'➖ Cantón no encontrado');
+  l.push(r.distrito?(r.f.distrito==='?'?'⚠️ Distrito: '+esc(r.distrito)+(r.canton?' (no está entre los distritos de '+esc(r.canton)+': confírmalo)':' (confírmalo)'):'✅ Distrito: '+esc(r.distrito)):'➖ Distrito no encontrado');
+  l.push(r.otros?'✅ Señas: '+esc(r.otros):'➖ Sin señas');
+  var det='<details style="margin-top:6px"><summary class="mu">Ver texto leído</summary><pre style="white-space:pre-wrap;font-size:11px;margin:4px 0">'+esc(txt)+'</pre></details>';
+  var m=$('dv_wa_msg');
+  if(m){m.innerHTML='<b>Datos cargados.</b> Revisa los campos marcados antes de registrar.<br>'+l.join('<br>')+det;m.style.color=r.nombre?'':'var(--wn)'}
+  $('st').textContent='';
+}
+function waFoto(inp){
+  var fl=inp.files&&inp.files[0];if(!fl)return;
+  if(OCR_Busy)return;OCR_Busy=true;
+  waMsgModal('Cargando lector de texto…');
+  ocrCargarLib().then(function(){waMsgModal('Preparando imagen…');return ocrPrep(fl)}).then(function(cv){
+    return Tesseract.recognize(cv,'spa',{logger:function(m){
+      if(m.status==='recognizing text')waMsgModal('Leyendo la imagen… '+Math.round((m.progress||0)*100)+'%');
+      else if(/loading/.test(m.status||''))waMsgModal('Descargando el idioma español (solo la primera vez)…');
+    }});
+  }).then(function(r){
+    OCR_Busy=false;inp.value='';
+    var text=(r.data&&r.data.text)||'',conf=Math.round((r.data&&r.data.confidence)||0);
+    var ta=$('wa_txt');if(ta)ta.value=text;
+    if(conf<40||text.replace(/\s/g,'').length<15){
+      waMsgModal('❌ No se pudo leer bien la imagen (legibilidad '+conf+'%). Prueba con una captura más nítida o pega el texto.','var(--bad)');return;
+    }
+    waLeer();
+  }).catch(function(e){
+    OCR_Busy=false;inp.value='';
+    waMsgModal('❌ '+esc(e&&e.message?e.message:'No se pudo leer la imagen. Intenta de nuevo.'),'var(--bad)');
+  });
+}
+/* ===== fin TRAER DATOS DE WHATSAPP ===== */
+
 function setDvTipo(t){
   dvTipo = t; var b = (t === 'bodega');
   var show = function(id, on){ var e = $(id); if(e) e.style.display = on ? '' : 'none'; };
-  show('dv_form_body', true); show('dv_guia_wrap', !b); show('dv_tel_wrap', !b); show('dv_envio_box', !b);
+  show('dv_form_body', true); show('dv_wa_wrap', !b); show('dv_guia_wrap', !b); show('dv_tel_wrap', !b); show('dv_envio_box', !b);
   var bb = $('dv_tp_bodega'), be = $('dv_tp_envio');
   if(bb) bb.className = 'pri' + (b ? '' : ' sec');
   if(be) be.className = 'pri' + (b ? ' sec' : '');
@@ -1950,6 +2289,7 @@ function detallesVentasSection(){
         + '<button type="button" id="dv_tp_envio" class="pri'+(tp==='envio'?'':' sec')+'" onclick="setDvTipo(\'envio\')">📦 Venta con Envío</button>'
         + '</div>'
         + '<div id="dv_form_body" style="'+(tp?'':'display:none')+'">'
+        + '<div id="dv_wa_wrap" style="'+(tp==='envio'?'':'display:none')+'"><button type="button" class="pri sec" onclick="waAbrir()">💬 Traer de WhatsApp</button><div id="dv_wa_msg" class="mu" style="margin:8px 0"></div></div>'
         + '<div class="row">'
         + '<div><label class="fld-lbl">Fecha de venta</label><input type="date" id="dv_fecha" value="'+(edObj ? edObj.d : today())+'"></div>'
         + '<div id="dv_guia_wrap" style="'+(tp==='envio'?'':'display:none')+'"><label class="fld-lbl">Número de guía</label><input id="dv_guia" placeholder="Manual o escáner" value="'+(dm ? esc(dm.guia||'') : '')+'"></div>'
