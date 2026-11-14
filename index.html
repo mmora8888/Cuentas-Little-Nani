@@ -16,7 +16,7 @@ h2{font-size:15px;margin:20px 0 9px;color:var(--tx);font-weight:700;display:flex
 
 /* Header y Navegación */
 .hd{display:flex;align-items:center;gap:12px;margin:2px 0 14px}
-.hd img{width:76px;height:76px;border-radius:0;flex:none;background:#fff;border:0;object-fit:contain;padding:0;box-shadow:none}
+.hd img{width:76px;height:76px;border-radius:50%;flex:none;background:#fff;border:1px solid var(--bd);object-fit:contain;object-position:center;padding:0;box-shadow:none}
 .lo{margin-left:auto;border:1px solid var(--bd);background:var(--card);color:var(--mu);border-radius:10px;padding:6px 11px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
 
 .tabs{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
@@ -410,7 +410,8 @@ function expJSON(){
     ahorros: S.ahorros,
     cuentasBancarias: S.cuentas||{},
     tipoCambioUSD: S.tipoCambioUSD||0,
-    version: '2.3',
+    casaMesCerrado: S.casaMesCerrado||'',
+    version: '2.4',
     fechaExportacion: today()
   };
   var b = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json;charset=utf-8'});
@@ -455,6 +456,7 @@ function impJSON(el){
       if(data.ahorros)cfg.ahorros=data.ahorros;
       if(data.cuentasBancarias&&typeof data.cuentasBancarias==='object')cfg.cuentasBancarias=data.cuentasBancarias;
       if(typeof data.tipoCambioUSD==='number')cfg.tipoCambioUSD=data.tipoCambioUSD;
+      if(typeof data.casaMesCerrado==='string')cfg.casaMesCerrado=data.casaMesCerrado;
       if(Object.keys(cfg).length)ps.push(FS.doc(P+'config/main').set(cfg,{merge:true}));
       Promise.all(ps).then(function(){
         $('st').textContent='Respaldo restaurado: '+data.items.length+' movimientos, '+data.creditos.length+' apartados, '+cots.length+' cotizaciones y '+cxs.length+' cuentas por pagar.';
@@ -862,9 +864,6 @@ function casaApartarSemana(){
   if(mInput === null) return;
   var monto = parseFloat(mInput.replace(',','.'));
   if(!(monto > 0)){ alert('Monto inválido'); return; }
-  var w = wk(today());
-  var yaApartado = S.items.some(function(i){ return i.t === 'g' && i.c === 'Fondo Casa' && wk(i.d) === w; });
-  if(yaApartado){alert('Ya registraste el apartado de esta semana. Puedes volver a apartar la próxima semana.');return;}
   var it = {id:'casa-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:'g',d:today(),n:'Apartado semanal Fondo de la Casa',c:'Fondo Casa',a:Math.round(monto*100)/100};
   put(it);$('st').textContent='Apartado semanal guardado correctamente';render();
 }
@@ -873,11 +872,32 @@ function casaTotales(){var ap=0,pg=0;casaItemsMes().forEach(function(i){if(i.t!=
 function casaRubroPagado(nombre){return casaItemsMes().some(function(i){return casaEsPago(i)&&(i.n||'')==='Pago Casa: '+nombre})}
 function casaCerrarMes(){
   var m=casaMesKey();
-  if(casaMesCerrado()){alert('Este mes ya está cerrado. El siguiente mes se habilitará automáticamente.');return}
-  if(!confirm('¿Cerrar '+m+'? Se bloquearán nuevos pagos y apartados de este mes. Todas las transacciones y el balance global se conservarán. El próximo mes comenzará con los controles en cero.'))return;
+  if(casaMesCerrado()){alert('Este mes ya está cerrado. Puedes reabrirlo si necesitas registrar movimientos.');return}
+  if(!confirm('Antes de cerrar '+m+' se descargará un respaldo completo. ¿Continuar?'))return;
+  expJSON();
+  if(!confirm('Confirma el cierre de '+m+'. Los movimientos y el balance global se conservarán; solo se bloquearán nuevos registros de este mes.'))return;
   S.casaMesCerrado=m;
   if(DB)DB.doc(P+'config/main').set({casaMesCerrado:m},{merge:true}).then(function(){$('st').textContent='Mes cerrado correctamente';render()}).catch(function(e){S.casaMesCerrado='';$('st').textContent='No se pudo cerrar el mes: '+e.message;render()});
   else{$('st').textContent='Mes cerrado';render()}
+}
+function casaReabrirMes(){
+  var m=casaMesKey();
+  if(!casaMesCerrado()){alert('El mes actual no está cerrado.');return}
+  if(!confirm('¿Reabrir '+m+'? Se habilitará nuevamente el registro de apartados y pagos. Las transacciones existentes y el balance global se conservarán.'))return;
+  S.casaMesCerrado='';
+  if(DB){
+    DB.doc(P+'config/main').set({casaMesCerrado:''},{merge:true}).then(function(){
+      $('st').textContent='Mes reabierto. Ya puedes registrar movimientos.';
+      render();
+    }).catch(function(e){
+      S.casaMesCerrado=m;
+      $('st').textContent='No se pudo reabrir el mes: '+e.message;
+      render();
+    });
+  }else{
+    $('st').textContent='Mes reabierto. Ya puedes registrar movimientos.';
+    render();
+  }
 }
 function casaPagarRubro(nombreRubro, montoPorDefecto){
   if(casaMesCerrado()){alert('El mes está cerrado. Los pagos se habilitarán el próximo mes.');return;}
@@ -985,7 +1005,7 @@ function gastosCasaSection(){
   var h = '<button type="button" class="pri sec" style="margin-bottom:10px" onclick="go(\'g\')">← Volver a Gastos</button>'
     + '<div class="dash-hero"><div class="eyebrow">Presupuesto familiar · '+casaMesKey()+'</div><div class="amount">'+money(disponible)+'</div><div style="font-weight:650">Disponible en Fondo de la Casa</div><div class="sub">Apartado acumulado: ₡'+money(totalApartado)+' · Pagado: ₡'+money(totalPagado)+'</div></div>'
     + '<div class="dash-panel"><div class="prog-wrap"><div class="prog-head"><span>Uso del fondo acumulado</span><b>'+pctUsado+'% ejecutado</b></div><div class="prog-track"><div class="prog-fill '+(disponible<0?'bad':'ac')+'" style="width:'+pctUsado+'%"></div></div></div>'
-    + '<button class="pri" style="margin-top:10px" '+(cerrado?'disabled':'')+' onclick="casaApartarSemana()">➕ Apartar esta semana (₡160,000 sugeridos)</button><p class="mu">Apartado acumulado del mes: ₡'+money(totalApartado)+' · Este monto vuelve a cero al iniciar un nuevo mes.</p></div>'
+    + '<button class="pri" style="margin-top:10px" '+(cerrado?'disabled':'')+' onclick="casaApartarSemana()">➕ Registrar aporte (₡160,000 sugeridos)</button><p class="mu">Aportes acumulados del mes: ₡'+money(totalApartado)+' · Puedes registrar varios aportes en una misma semana.</p></div>'
     + '<h2>2. Rubros del mes</h2><div class="dash-panel">';
 
   rubrosDef.forEach(function(r){
@@ -997,7 +1017,10 @@ function gastosCasaSection(){
       + '</div></div>';
   });
 
-  h += '</div><div class="dash-panel" style="margin-top:12px"><b>Cierre del mes</b><p class="mu">'+(cerrado?'Mes cerrado. El próximo mes se habilitará automáticamente.':'Al cerrar, se bloquean los pagos y apartados de este mes. Las transacciones históricas y el balance global no se borran.')+'</p><button class="pri '+(cerrado?'sec':'')+'" '+(cerrado?'disabled':'')+' onclick="casaCerrarMes()">'+(cerrado?'✓ Mes cerrado':'🔒 Cerrar mes')+'</button></div><h2>3. Historial de apartados y pagos</h2><div class="dash-panel">';
+  h += '</div><div class="dash-panel" style="margin-top:12px"><b>Cierre del mes</b><p class="mu">'+(cerrado?'Mes cerrado. Puedes reabrirlo para volver a registrar movimientos.':'Antes del cierre se descargará automáticamente un respaldo completo. Las transacciones y el balance global se conservarán.')+'</p>'
+    +'<div class="btn-bar"><button class="pri sec" onclick="expJSON()">⬇ Descargar respaldo ahora</button>'
+    +(cerrado?'<button class="pri ok" onclick="casaReabrirMes()">🔓 Reabrir mes</button>':'<button class="pri" onclick="casaCerrarMes()">🔒 Cerrar mes</button>')
+    +'</div></div><h2>3. Historial de apartados y pagos</h2><div class="dash-panel">';
   var historial = S.items.filter(function(i){return i.t==='g'&&(i.c==='Fondo Casa'||casaEsPago(i))}).sort(function(a,b){return a.d<b.d?1:-1});
   if(!historial.length) h += '<p class="mu">Aún no hay movimientos registrados en gastos de la casa.</p>';
   else {
