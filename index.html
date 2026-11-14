@@ -104,6 +104,14 @@ input:focus,select:focus{outline:none;border-color:var(--ac)}
 .btn-sm.bad{color:var(--bad)}
 .btn-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .btn-bar > *{flex:1;min-width:130px}
+/* Sugerencias de provincia / cantón / distrito */
+.geo-list{position:fixed;z-index:9999;background:var(--card);border:1px solid var(--bd);border-radius:10px;max-height:230px;overflow-y:auto;box-shadow:0 8px 22px rgba(0,0,0,.18);-webkit-overflow-scrolling:touch}
+.geo-list div{padding:9px 11px;font-size:14px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--bd)}
+.geo-list div:last-child{border-bottom:0}
+.geo-list div.on,.geo-list div:hover{background:var(--bg)}
+.geo-list small{color:var(--mu);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.geo-warn{border-color:var(--wn)!important}
+
 
 /* Listas y badges */
 .it{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd)}
@@ -1824,8 +1832,117 @@ function waAplicar(r,txt){
   var det='<details style="margin-top:6px"><summary class="mu">Ver texto leído</summary><pre style="white-space:pre-wrap;font-size:11px;margin:4px 0">'+esc(txt)+'</pre></details>';
   var m=$('dv_wa_msg');
   if(m){m.innerHTML='<b>Datos cargados.</b> Revisa los campos marcados antes de registrar.<br>'+l.join('<br>')+det;m.style.color=r.nombre?'':'var(--wn)'}
+  geoValidate();
   $('st').textContent='';
 }
+
+/* ===== SUGERENCIAS DE UBICACIÓN (lista completa de Costa Rica, sin importar tildes) ===== */
+var GEO_HI=-1,GEO_ITEMS=[],GEO_FIELD='',GEO_T=null;
+function geoCtx(){
+  waGeoInit();
+  var pv=($('dv_provincia')||{}).value||'',cv=($('dv_canton')||{}).value||'',dv=($('dv_distrito')||{}).value||'';
+  var prov=WA_PROV[waNorm(pv)]||'';
+  var cant=waCant(waNorm(cv));
+  if(cant&&prov&&cant.p!==prov)cant=null;
+  return {pv:pv,cv:cv,dv:dv,prov:prov,cant:cant};
+}
+function geoRank(name,q){var k=waNorm(name);if(!q)return 1;var i=k.indexOf(q);if(i<0)return 0;return i===0?3:(k.indexOf(' '+q)>=0?2:1)}
+function geoBuild(field){
+  var x=geoCtx(),out=[],q=waNorm(x[field==='provincia'?'pv':field==='canton'?'cv':'dv']);
+  if(field==='provincia'){
+    Object.keys(WA_GEO).forEach(function(p){var r=geoRank(p,q);if(r)out.push({t:p,s:'',r:r,p:p})});
+  }else if(field==='canton'){
+    if(!q&&!x.prov)return [];
+    Object.keys(WA_GEO).forEach(function(p){
+      if(x.prov&&p!==x.prov)return;
+      Object.keys(WA_GEO[p]).forEach(function(c){var r=geoRank(c,q);if(r)out.push({t:c,s:x.prov?'':p,r:r,p:p,c:c})});
+    });
+  }else{
+    if(!q&&!x.cant)return [];
+    Object.keys(WA_GEO).forEach(function(p){
+      if(x.prov&&p!==x.prov)return;
+      Object.keys(WA_GEO[p]).forEach(function(c){
+        if(x.cant&&c!==x.cant.n)return;
+        WA_GEO[p][c].split('|').forEach(function(d){
+          var r=geoRank(d,q);if(r)out.push({t:d,s:x.cant?'':c+(x.prov?'':' · '+p),r:r,p:p,c:c});
+        });
+      });
+    });
+  }
+  out.sort(function(a,b){return b.r-a.r||(waNorm(a.t)<waNorm(b.t)?-1:1)});
+  return out.slice(0,40);
+}
+function geoBox(){
+  var b=$('geo_list');
+  if(!b){b=document.createElement('div');b.id='geo_list';b.className='geo-list';document.body.appendChild(b)}
+  return b;
+}
+function geoClose(){var b=$('geo_list');if(b)b.remove();GEO_ITEMS=[];GEO_HI=-1}
+function geoIn(field){
+  GEO_FIELD=field;
+  var el=$('dv_'+field);if(!el)return;
+  GEO_ITEMS=geoBuild(field);GEO_HI=-1;
+  geoValidate();
+  if(!GEO_ITEMS.length){var o=$('geo_list');if(o)o.remove();return}
+  var b=geoBox(),r=el.getBoundingClientRect();
+  b.style.left=r.left+'px';b.style.width=Math.max(r.width,190)+'px';
+  var below=window.innerHeight-r.bottom;
+  if(below<190&&r.top>below){b.style.top='auto';b.style.bottom=(window.innerHeight-r.top+2)+'px';b.style.maxHeight=Math.min(230,r.top-10)+'px'}
+  else{b.style.bottom='auto';b.style.top=(r.bottom+2)+'px';b.style.maxHeight=Math.min(230,below-10)+'px'}
+  b.innerHTML=GEO_ITEMS.map(function(it,i){
+    return '<div data-i="'+i+'" onmousedown="event.preventDefault()" onclick="geoPick('+i+')"><span>'+esc(it.t)+'</span>'+(it.s?'<small>'+esc(it.s)+'</small>':'')+'</div>';
+  }).join('');
+}
+function geoHi(){
+  var b=$('geo_list');if(!b)return;
+  [].forEach.call(b.children,function(d,i){d.classList.toggle('on',i===GEO_HI);if(i===GEO_HI)d.scrollIntoView({block:'nearest'})});
+}
+function geoKey(e,field){
+  if(!GEO_ITEMS.length)return;
+  if(e.key==='ArrowDown'){e.preventDefault();GEO_HI=Math.min(GEO_ITEMS.length-1,GEO_HI+1);geoHi()}
+  else if(e.key==='ArrowUp'){e.preventDefault();GEO_HI=Math.max(0,GEO_HI-1);geoHi()}
+  else if(e.key==='Enter'&&(GEO_HI>=0||GEO_ITEMS.length===1)){e.preventDefault();geoPick(GEO_HI>=0?GEO_HI:0)}
+  else if(e.key==='Escape'){geoClose()}
+}
+function geoBlur(){clearTimeout(GEO_T);GEO_T=setTimeout(function(){geoClose();geoValidate()},160)}
+function geoPick(i){
+  var it=GEO_ITEMS[i];if(!it)return;
+  var f=GEO_FIELD,P=$('dv_provincia'),C=$('dv_canton'),D=$('dv_distrito');
+  if(f==='provincia'){
+    P.value=it.t;
+    var c0=waCant(waNorm(C.value));if(c0&&c0.p!==it.t){C.value='';D.value=''}
+  }else if(f==='canton'){
+    C.value=it.t;P.value=it.p;
+    var d0=D.value&&waNorm(D.value);if(d0&&!waCant(waNorm(it.t)).dk[d0])D.value='';
+  }else{
+    D.value=it.t;C.value=it.c;P.value=it.p;
+  }
+  geoClose();geoValidate();
+  var nx=f==='provincia'?C:f==='canton'?D:null;
+  if(nx&&!nx.value){nx.focus()}
+}
+function geoValidate(){
+  var P=$('dv_provincia'),C=$('dv_canton'),D=$('dv_distrito');if(!P||!C||!D)return true;
+  waGeoInit();
+  var pv=P.value.trim(),cv=C.value.trim(),dv=D.value.trim(),msg=[];
+  var prov=pv?WA_PROV[waNorm(pv)]:'',cant=cv?waCant(waNorm(cv)):null;
+  var pBad=!!pv&&!prov;
+  var cBad=!!cv&&(!cant||(!!prov&&cant.p!==prov));
+  var dBad=false;
+  if(dv){
+    var dk=waNorm(dv);
+    if(cant&&!cBad)dBad=!cant.dk[dk];
+    else if(prov)dBad=!(WA_DIST[dk]||[]).some(function(x){return x.c.p===prov});
+    else dBad=!WA_DIST[dk];
+  }
+  if(pBad)msg.push('Provincia "'+esc(pv)+'" no está en el listado de Costa Rica');
+  if(cBad)msg.push(cant&&prov&&cant.p!==prov?'El cantón '+esc(cant.n)+' pertenece a '+esc(cant.p)+', no a '+esc(prov):'Cantón "'+esc(cv)+'" no está en el listado de Costa Rica');
+  if(dBad)msg.push(cant&&!cBad?'Distrito "'+esc(dv)+'" no es de '+esc(cant.n):'Distrito "'+esc(dv)+'" no está en el listado de Costa Rica');
+  P.classList.toggle('geo-warn',pBad);C.classList.toggle('geo-warn',cBad);D.classList.toggle('geo-warn',dBad);
+  var h=$('dv_geo_hint');if(h){h.innerHTML=msg.length?'<span style="color:var(--wn)">⚠️ '+msg.join(' · ')+'</span>':''}
+  return !msg.length;
+}
+window.addEventListener('scroll',function(){if($('geo_list')&&GEO_FIELD)geoIn(GEO_FIELD)},true);
 function waFoto(inp){
   var fl=inp.files&&inp.files[0];if(!fl)return;
   if(OCR_Busy)return;OCR_Busy=true;
@@ -1938,6 +2055,7 @@ function editDetalleVenta(id){
     if($('dv_canton')) $('dv_canton').value = item.dvMeta.canton || '';
     if($('dv_distrito')) $('dv_distrito').value = item.dvMeta.distrito || '';
     if($('dv_otros')) $('dv_otros').value = item.dvMeta.otrosDatos || '';
+    geoValidate();
   }, 50);
   dvArticulosTemp = JSON.parse(JSON.stringify(item.dvMeta.articulos || []));
   render();window.scrollTo({top:0, behavior:'smooth'});
@@ -2305,10 +2423,11 @@ function detallesVentasSection(){
         + '<label class="fld-lbl">Monto de envío</label>'
         + '<input id="dv_envio" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="'+(dm ? dm.envio : '')+'" oninput="actualizarTotalVentaCalculado()">'
         + '<div class="row">'
-        + '<div><label class="fld-lbl">Provincia</label><input id="dv_provincia" placeholder="Provincia" value="'+(dm ? esc(dm.provincia||'') : '')+'"></div>'
-        + '<div><label class="fld-lbl">Cantón</label><input id="dv_canton" placeholder="Cantón" value="'+(dm ? esc(dm.canton||'') : '')+'"></div>'
-        + '<div><label class="fld-lbl">Distrito</label><input id="dv_distrito" placeholder="Distrito" value="'+(dm ? esc(dm.distrito||'') : '')+'"></div>'
+        + '<div><label class="fld-lbl">Provincia</label><input id="dv_provincia" placeholder="Provincia" autocomplete="off" autocapitalize="words" oninput="geoIn(\'provincia\')" onfocus="geoIn(\'provincia\')" onblur="geoBlur()" onkeydown="geoKey(event,\'provincia\')" value="'+(dm ? esc(dm.provincia||'') : '')+'"></div>'
+        + '<div><label class="fld-lbl">Cantón</label><input id="dv_canton" placeholder="Cantón" autocomplete="off" autocapitalize="words" oninput="geoIn(\'canton\')" onfocus="geoIn(\'canton\')" onblur="geoBlur()" onkeydown="geoKey(event,\'canton\')" value="'+(dm ? esc(dm.canton||'') : '')+'"></div>'
+        + '<div><label class="fld-lbl">Distrito</label><input id="dv_distrito" placeholder="Distrito" autocomplete="off" autocapitalize="words" oninput="geoIn(\'distrito\')" onfocus="geoIn(\'distrito\')" onblur="geoBlur()" onkeydown="geoKey(event,\'distrito\')" value="'+(dm ? esc(dm.distrito||'') : '')+'"></div>'
         + '</div>'
+        + '<div id="dv_geo_hint" class="mu" style="margin:-2px 0 8px"></div>'
         + '<label class="fld-lbl">Dirección exacta / señas</label>'
         + '<input id="dv_otros" placeholder="Color de casa, referencias..." value="'+(dm ? esc(dm.otrosDatos||'') : '')+'">'
         + '</div>'
