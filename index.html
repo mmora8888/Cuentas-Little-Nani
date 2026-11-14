@@ -681,6 +681,35 @@ function provDL(){
   l.sort(function(a,b){return a.toLowerCase()<b.toLowerCase()?-1:1});
   return '<datalist id="prov-dl">'+l.map(function(n){return '<option value="'+esc(n)+'">'}).join('')+'</datalist>';
 }
+function provData(){
+  var pm={},cm={};
+  var arr=(S.cxp||[]).map(function(c){return{n:(c.p||'').trim(),j:(c.j||'').trim()}});
+  S.items.filter(function(i){return i.t==='f'}).slice().sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:0}).forEach(function(i){arr.push({n:(i.n||'').trim(),j:(i.j||'').trim()})});
+  arr.forEach(function(x){
+    var k=x.n.toLowerCase(),d=x.j.replace(/\D/g,'');
+    if(k){var e=pm[k]||(pm[k]={n:x.n,j:''});e.n=x.n;if(x.j)e.j=x.j}
+    if(d){var c=cm[d]||(cm[d]={j:x.j,n:''});c.j=x.j;if(x.n)c.n=x.n}
+  });
+  return {pm:pm,cm:cm};
+}
+function cedDL(){
+  var d=provData(),l=Object.keys(d.cm).map(function(k){return d.cm[k]});
+  l.sort(function(a,b){return a.n.toLowerCase()<b.n.toLowerCase()?-1:1});
+  return '<datalist id="ced-dl">'+l.map(function(c){return '<option value="'+esc(c.j)+'" label="'+esc(c.n)+'">'}).join('')+'</datalist>';
+}
+function provSel(){
+  var n=$('n'),j=$('j');if(!n||!j)return;
+  var e=provData().pm[n.value.trim().toLowerCase()];
+  if(e&&e.j){if(!j.value.trim()||j.dataset.auto==='1'){j.value=e.j;j.dataset.auto='1'}}
+  else if(j.dataset.auto==='1'){j.value='';j.dataset.auto=''}
+}
+function cedSel(){
+  var n=$('n'),j=$('j');if(!n||!j)return;
+  j.dataset.auto='';
+  var d=j.value.replace(/\D/g,'');if(!d)return;
+  var e=provData().cm[d];
+  if(e&&e.n&&!n.value.trim())n.value=e.n;
+}
 function CJ(){
   var m={},l=[];S.items.filter(function(i){return i.t==='f'}).forEach(function(i){var j=(i.j||'').trim(),k=j.replace(/\D/g,'');if(k&&!m[k]){m[k]=1;l.push([k,j+(i.n?' · '+i.n.trim():'')])}});
   l.sort(function(a,b){return a[0]<b[0]?-1:1});return [['','Todas las cédulas']].concat(l);
@@ -2866,11 +2895,11 @@ var TT={v:'Ventas',f:'Facturas',g:'Gastos',r:'Resumen',q:'Reportes',ah:'Ahorros'
 
 function form(t,ei){
   var cat=t==='g'?'<label class="fld-lbl">Categoría</label><select id="c">'+CATS.filter(function(c){return c!=='Fondo Casa'&&c!=='Fondo Impuestos'}).map(function(c){return '<option'+(ei&&ei.c===c?' selected':'')+'>'+c+'</option>'}).join('')+'</select>':'';
-  var el=t==='f'?'<label class="fld-lbl">Cédula jurídica</label><input id="j" placeholder="Opcional" inputmode="numeric" value="'+(ei?esc(ei.j||''):'')+'"><label class="chk"><input type="checkbox" id="e"'+(ei&&ei.e?' checked':'')+'> Factura electrónica</label>'+(ei?'':'<label class="chk"><input type="checkbox" id="cn"> Ya está pagada (no agregar a por pagar)</label>'):'';
+  var el=t==='f'?'<label class="fld-lbl">Cédula jurídica</label><input id="j" list="ced-dl" autocomplete="off" oninput="cedSel()" onchange="cedSel()" placeholder="Opcional" inputmode="numeric" value="'+(ei?esc(ei.j||''):'')+'">'+cedDL()+'<label class="chk"><input type="checkbox" id="e"'+(ei&&ei.e?' checked':'')+'> Factura electrónica</label>'+(ei?'':'<label class="chk"><input type="checkbox" id="cn"> Ya está pagada (no agregar a por pagar)</label>'):'';
   var lblBtn = ei ? 'Guardar cambios' : (t==='f' ? 'Registrar factura' : 'Registrar gasto');
   return '<h2>'+(ei?'Editar registro':'Registrar '+TT[t].toLowerCase().slice(0,-1))+'</h2>'
     +'<div class="dash-panel">'+ocrUI(t,ei)+'<div class="row-fm"><div><label class="fld-lbl">Fecha</label><input id="d" type="date" value="'+(ei?ei.d:today())+'"></div><div><label class="fld-lbl">Monto</label><input id="a" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="'+(ei?ei.a:'')+'"></div></div>'
-    +'<label class="fld-lbl">'+(t==='f'?'Proveedor':'Detalle o concepto')+'</label><input id="n"'+(t==='f'?' list="prov-dl" autocomplete="off"':'')+' placeholder="'+(t==='f'?'Escribe o elige un proveedor':'Descripción...')+'" value="'+(ei?esc(ei.n):'')+'">'+(t==='f'?provDL():'')
+    +'<label class="fld-lbl">'+(t==='f'?'Proveedor':'Detalle o concepto')+'</label><input id="n"'+(t==='f'?' list="prov-dl" autocomplete="off" oninput="provSel()" onchange="provSel()"':'')+' placeholder="'+(t==='f'?'Escribe o elige un proveedor':'Descripción...')+'" value="'+(ei?esc(ei.n):'')+'">'+(t==='f'?provDL():'')
     +cat+el+'<button class="pri" onclick="add(\''+t+'\')">'+lblBtn+'</button>'
     +(ei?'<button type="button" class="pri sec" style="margin-top:8px" onclick="ed=null;render()">Cancelar</button>':'')+'</div>';
 }
