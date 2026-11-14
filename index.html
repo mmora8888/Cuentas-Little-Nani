@@ -320,6 +320,7 @@ function add(t){
   if(!d||!(a>0)){$('st').textContent='Indica fecha y un monto mayor a 0';return}
   var it={id:ed||Date.now().toString(36)+Math.random().toString(36).slice(2,6),t:t,d:d,n:n,a:Math.round(a*100)/100};if(t==='g')it.c=$('c').value;
   if(t==='f'){it.e=$('e').checked;var j=$('j').value.trim();if(j)it.j=j;var pf=!$('cn').checked}
+  var oldIt=ed?S.items.filter(function(x){return x.id===ed})[0]:null;if(oldIt&&oldIt.ex270)it.ex270=oldIt.ex270;
   ed=null;put(it);if(t==='f')cxSync(it,pf);W=wk(d);$('st').textContent='';save();render();
 }
 function del(id){
@@ -2384,7 +2385,7 @@ function imData(d,h,useEx){
     var best='',bc=0;Object.keys(p.names).forEach(function(k){if(p.names[k]>bc){bc=p.names[k];best=k}});p.n=best;
     p.eInc=0;p.eAll=0;p.nInc=0;p.nAll=0;
     ['e','ne'].forEach(function(f){p[f].forEach(function(ix){
-      var i=fs[ix],a=Number(i.a)||0,inc=!(useEx&&(IM_ExP[p.key]||IM_ExT[i.id]));
+      var i=fs[ix],a=Number(i.a)||0,inc=!(i.ex270||(useEx&&(IM_ExP[p.key]||IM_ExT[i.id])));
       if(f==='e'){p.eAll+=a;if(inc){p.eInc+=a;T.nF++}}else{p.nAll+=a;if(inc){p.nInc+=a;T.nF++}}
       if(!inc)T.exc+=a;
     })});
@@ -2404,13 +2405,15 @@ function imBlock(T,f,titulo,color){
   var rows='',n=0,sub=0;
   T.provs.forEach(function(p){
     if(!p[f].length)return;n++;
-    var inc=f==='e'?p.eInc:p.nInc,all=f==='e'?p.eAll:p.nAll,ex=!!IM_ExP[p.key],k=p.key+'|'+f,op=!!IM_Open[k];
+    var inc=f==='e'?p.eInc:p.nInc,all=f==='e'?p.eAll:p.nAll,n270=0;
+    p[f].forEach(function(ix){if(T.items[ix].ex270)n270++});
+    var all270=n270===p[f].length,ex=!!IM_ExP[p.key]||all270,k=p.key+'|'+f,op=!!IM_Open[k];
     sub+=inc;
-    rows+='<div class="it" style="'+(ex?'opacity:.55':'')+'"><input type="checkbox" style="width:auto;margin:0;flex:none;transform:scale(1.25)" '+(ex?'':'checked')+' onchange="imTogP('+p.idx+')" title="Incluir proveedor"><div class="t"><b>'+esc(p.n)+'</b><small>'+(p.j?'Céd. '+esc(p.j)+' · ':'')+p[f].length+' factura(s)'+(inc!==all?' · ₡'+money(all)+' en total, ₡'+money(all-inc)+' excluido':'')+'</small></div><b>₡'+money(inc)+'</b><button type="button" onclick="imTogOpen('+p.idx+',\''+f+'\')">'+(op?'Ocultar':'Ver')+'</button></div>';
+    rows+='<div class="it" style="'+(ex?'opacity:.55':'')+'"><input type="checkbox" style="width:auto;margin:0;flex:none;transform:scale(1.25)" '+(ex?'':'checked')+(all270?' disabled':'')+' onchange="imTogP('+p.idx+')" title="Incluir proveedor"><div class="t"><b>'+esc(p.n)+'</b><small>'+(p.j?'Céd. '+esc(p.j)+' · ':'')+p[f].length+' factura(s)'+(n270?' · '+n270+' excluida(s) en la Declaración 270':'')+((inc!==all&&!n270)?' · ₡'+money(all)+' en total, ₡'+money(all-inc)+' excluido':'')+'</small></div><b>₡'+money(inc)+'</b><button type="button" onclick="imTogOpen('+p.idx+',\''+f+'\')">'+(op?'Ocultar':'Ver')+'</button></div>';
     if(op){
       p[f].forEach(function(ix){
-        var i=T.items[ix],cx=cxGet(i.id),pen=cx&&cxSaldo(cx)>0,tx=!!IM_ExT[i.id];
-        rows+='<div class="it" style="margin-left:22px;font-size:13px;'+((ex||tx)?'opacity:.55':'')+'"><input type="checkbox" style="width:auto;margin:0;flex:none;transform:scale(1.15)" '+((ex||tx)?'':'checked')+(ex?' disabled':'')+' onchange="imTogT('+ix+')" title="Incluir esta factura"><div class="t">'+shDot(i.d)+(pen?'<span class="bd">Pendiente</span>':'')+'</div><span>₡'+money(i.a)+'</span></div>';
+        var i=T.items[ix],cx=cxGet(i.id),pen=cx&&cxSaldo(cx)>0,tx=!!IM_ExT[i.id]||!!i.ex270;
+        rows+='<div class="it" style="margin-left:22px;font-size:13px;'+((ex||tx)?'opacity:.55':'')+'"><input type="checkbox" style="width:auto;margin:0;flex:none;transform:scale(1.15)" '+((ex||tx)?'':'checked')+((ex||i.ex270)?' disabled':'')+' onchange="imTogT('+ix+')" title="Incluir esta factura"><div class="t">'+shDot(i.d)+(pen?'<span class="bd">Pendiente</span>':'')+(i.ex270?'<span class="bd bad">Excluida en D-270</span>':'')+'</div><span>₡'+money(i.a)+'</span></div>';
       });
     }
   });
@@ -2422,7 +2425,7 @@ function imBox(){
     +'<div class="dash-tile"><span class="label">Con factura electrónica</span><strong class="pos">₡'+money(T.e)+'</strong></div>'
     +'<div class="dash-tile"><span class="label">Sin factura electrónica</span><strong class="neg">₡'+money(T.ne)+'</strong></div></div>';
   h+=imBlock(T,'e','Proveedores con factura electrónica','pos')+imBlock(T,'ne','Proveedores sin factura electrónica','neg');
-  h+='<p class="mu" style="margin:0 0 8px">Desmarca un proveedor o una factura para excluirlo del cálculo. Las exclusiones solo valen mientras tengas esta pantalla abierta.</p>';
+  h+='<p class="mu" style="margin:0 0 8px">Desmarca un proveedor o una factura para excluirlo del cálculo; esas exclusiones solo valen mientras tengas esta pantalla abierta. Lo que excluyas en la Declaración 270 aparece aquí desmarcado y bloqueado.</p>';
   h+='<div class="btn-bar" style="margin:0"><button type="button" class="pri" onclick="imImprimir()">🖨️ Imprimir / PDF</button><button type="button" class="pri sec" onclick="imCSV()">📥 Descargar CSV</button></div>';
   return h;
 }
@@ -2446,7 +2449,7 @@ function imCSV(){
   var rows=[['RESUMEN DE COMPRAS POR PROVEEDOR',shDot(IM_D)+' - '+shDot(IM_H)],['Total de compras',T.total],['Con factura electrónica',T.e],['Sin factura electrónica',T.ne],['Excluido',T.exc],[],['PROVEEDORES CON FACTURA ELECTRÓNICA'],['Proveedor','Cédula','Facturas','Monto incluido','Monto total']]
     .concat(F.e.map(function(x){return [x.p.n,x.p.j,x.n,x.inc,x.all]}),[[],['PROVEEDORES SIN FACTURA ELECTRÓNICA'],['Proveedor','Cédula','Facturas','Monto incluido','Monto total']],F.ne.map(function(x){return [x.p.n,x.p.j,x.n,x.inc,x.all]}),
     [[],['DETALLE DE FACTURAS'],['Fecha','Proveedor','Cédula','Electrónica','Monto','Pendiente de pago','Incluida']]);
-  T.provs.forEach(function(p){['e','ne'].forEach(function(f){p[f].forEach(function(ix){var i=T.items[ix],cx=cxGet(i.id);rows.push([shDot(i.d),p.n,p.j,f==='e'?'Sí':'No',i.a,(cx&&cxSaldo(cx)>0)?'Sí':'No',(IM_ExP[p.key]||IM_ExT[i.id])?'No':'Sí'])})})});
+  T.provs.forEach(function(p){['e','ne'].forEach(function(f){p[f].forEach(function(ix){var i=T.items[ix],cx=cxGet(i.id);rows.push([shDot(i.d),p.n,p.j,f==='e'?'Sí':'No',i.a,(cx&&cxSaldo(cx)>0)?'Sí':'No',(i.ex270||IM_ExP[p.key]||IM_ExT[i.id])?'No':'Sí'])})})});
   var b=new Blob(['\ufeff'+rows.map(function(r){return r.map(q).join(',')}).join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
   a.href=URL.createObjectURL(b);a.download='impuestos-compras-'+IM_D+'_'+IM_H+'.csv';document.body.appendChild(a);a.click();a.remove();
   setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
@@ -2489,7 +2492,7 @@ function imDel(id){
   var ids=[id];S.items.forEach(function(i){if(i&&i.impRef===id)ids.push(i.id)});
   ids.forEach(function(x){rm(x)});render();
 }
-function impuestosSection(){
+function imTrimestral(){
   imInit();
   var ac=imAcum(),h='',wNow=wk(today());
   var tieneSem=S.items.some(function(i){return i&&i.c==='Fondo Impuestos'&&Number(i.a)>0&&!i.imLiq&&i.d&&wk(i.d)===wNow});
@@ -2529,6 +2532,118 @@ function impuestosSection(){
   if(fi.length>40)h+='<p class="mu" style="margin:6px 0">Mostrando los 40 más recientes.</p>';
   h+='</div></div>';
   return h;
+}
+/* ===== DECLARACIÓN 270 ===== */
+var IM_Sub='tri',D_D='',D_H='',D_Y=0,D_Open={},D_C=null,IM_MN=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function imMesTxt(m){return IM_MN[+m.slice(5)-1]+' '+m.slice(0,4)}
+function imSub(v){IM_Sub=v;render()}
+function d270Init(){if(D_D)return;imInit();D_D=IM_D;D_H=IM_H;D_Y=IM_Y}
+function d270Q(y,q){y=+y||new Date().getFullYear();D_Y=y;if(q<0){D_D=iso(new Date(y,0,1));D_H=iso(new Date(y,11,31))}else{D_D=iso(new Date(y,q*3,1));D_H=iso(new Date(y,q*3+3,0))}D_Open={};render()}
+function d270SetY(v){v=+v;if(!v||v<2000||v>2100)return;d270Q(v,Math.floor((+D_D.slice(5,7)-1)/3))}
+function d270SetR(k,v){if(!v)return;if(k)D_H=v;else D_D=v;if(D_D>D_H){if(k)D_D=v;else D_H=v}D_Y=+D_D.slice(0,4);D_Open={};render()}
+function d270Data(){
+  var fs=S.items.filter(function(i){return i&&i.t==='f'&&!i.e&&i.d&&i.d>=D_D&&i.d<=D_H}).sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:0});
+  var n2c={};
+  S.items.forEach(function(i){if(i&&i.t==='f'&&i.j&&String(i.j).trim()){var k=imNorm(i.n);if(k&&!n2c[k])n2c[k]=String(i.j).trim()}});
+  var months={},ml=[],pt={},pl=[],D={months:ml,provs:pl,total:0,exc:0,nInc:0,nExc:0};
+  fs.forEach(function(i){
+    var nm=(i.n||'').trim()||'Sin proveedor',ced=(i.j&&String(i.j).trim())||n2c[imNorm(i.n)]||'';
+    var key=ced?'c:'+imNorm(ced).replace(/ /g,''):'n:'+(imNorm(nm)||'sin proveedor');
+    var m=i.d.slice(0,7),M=months[m];
+    if(!M){M=months[m]={m:m,map:{},provs:[],total:0,exc:0};ml.push(M)}
+    var P=M.map[key];
+    if(!P){P=M.map[key]={key:key,j:ced,names:{},items:[],inc:0,all:0,nInc:0};M.provs.push(P)}
+    P.names[nm]=(P.names[nm]||0)+1;P.items.push(i);
+    var a=Number(i.a)||0;P.all+=a;
+    var T=pt[key];if(!T){T=pt[key]={key:key,j:ced,names:{},inc:0,nInc:0};pl.push(T)}
+    T.names[nm]=(T.names[nm]||0)+1;
+    if(i.ex270){M.exc+=a;D.exc+=a;D.nExc++}else{P.inc+=a;P.nInc++;M.total+=a;T.inc+=a;T.nInc++;D.total+=a;D.nInc++}
+  });
+  var best=function(o){var b='',c=0;Object.keys(o).forEach(function(k){if(o[k]>c){c=o[k];b=k}});return b};
+  ml.forEach(function(M){M.provs.forEach(function(P){P.n=best(P.names);P.inc=r2(P.inc)});M.provs.sort(function(a,b){return b.all-a.all});M.total=r2(M.total);M.exc=r2(M.exc)});
+  pl.forEach(function(T){T.n=best(T.names);T.inc=r2(T.inc)});
+  pl.sort(function(a,b){return b.inc-a.inc});
+  ml.sort(function(a,b){return a.m<b.m?-1:1});
+  D.total=r2(D.total);D.exc=r2(D.exc);
+  return D;
+}
+function d270Set(items,flag){
+  items.forEach(function(it){
+    var cur=S.items.filter(function(x){return x.id===it.id})[0];if(!cur)return;
+    var c=Object.assign({},cur);if(flag)c.ex270=1;else delete c.ex270;put(c);
+  });
+}
+function d270Refresh(){var b=$('d_box');if(b)b.innerHTML=d270Box()}
+function d270TogP(mi,pi){if(RO)return;var P=D_C.months[mi].provs[pi];if(!P)return;var any=P.items.some(function(i){return !i.ex270});d270Set(P.items,any);d270Refresh()}
+function d270TogT(mi,pi,ti){if(RO)return;var i=D_C.months[mi].provs[pi].items[ti];if(!i)return;d270Set([i],!i.ex270);d270Refresh()}
+function d270TogOpen(mi,pi){var k=D_C.months[mi].m+'|'+D_C.months[mi].provs[pi].key;if(D_Open[k])delete D_Open[k];else D_Open[k]=1;d270Refresh()}
+function d270Box(){
+  var D=d270Data();D_C=D;
+  var nProv=D.provs.length;
+  var h='<div class="dash-grid" style="margin:6px 0 10px"><div class="dash-tile dash-wide"><span class="label">Total general (no electrónicas)</span><strong>₡'+money(D.total)+'</strong><small>'+D.nInc+' factura(s) incluidas · '+nProv+' proveedor(es)'+(D.nExc?' · '+D.nExc+' excluida(s) por ₡'+money(D.exc):'')+'</small></div></div>';
+  if(!D.months.length)h+='<p class="mu" style="margin:4px 0">No hay facturas no electrónicas en este rango.</p>';
+  D.months.forEach(function(M,mi){
+    h+='<div class="dash-section"><h2>'+imMesTxt(M.m)+'</h2><div class="dash-panel"><div class="dash-tile" style="margin-bottom:8px"><span class="label">Total del mes</span><strong class="neg">₡'+money(M.total)+'</strong></div>';
+    M.provs.forEach(function(P,pi){
+      var nEx=P.items.filter(function(i){return i.ex270}).length,all=nEx===P.items.length,op=!!D_Open[M.m+'|'+P.key];
+      h+='<div class="it" style="'+(all?'opacity:.55':'')+'"><input type="checkbox" style="width:auto;margin:0;flex:none;transform:scale(1.25)" '+(all?'':'checked')+(RO?' disabled':'')+' onchange="d270TogP('+mi+','+pi+')" title="Incluir proveedor en este mes"><div class="t"><b>'+esc(P.n)+'</b><small>'+(P.j?'Céd. '+esc(P.j)+' · ':'')+P.items.length+' factura(s)'+(nEx&&!all?' · '+nEx+' excluida(s)':'')+'</small></div><b>₡'+money(P.inc)+'</b><button type="button" onclick="d270TogOpen('+mi+','+pi+')">'+(op?'Ocultar':'Ver')+'</button></div>';
+      if(op)P.items.forEach(function(i,ti){
+        h+='<div class="it" style="margin-left:22px;font-size:13px;'+(i.ex270?'opacity:.55':'')+'"><input type="checkbox" style="width:auto;margin:0;flex:none;transform:scale(1.15)" '+(i.ex270?'':'checked')+(RO?' disabled':'')+' onchange="d270TogT('+mi+','+pi+','+ti+')" title="Incluir esta factura"><div class="t">'+shDot(i.d)+'</div><span>₡'+money(i.a)+'</span></div>';
+      });
+    });
+    h+='</div></div>';
+  });
+  if(D.provs.length){
+    h+='<div class="dash-section"><h2>Total por proveedor en el periodo</h2><div class="dash-panel sc"><table><thead><tr><th>Proveedor</th><th>Cédula</th><th>Fact.</th><th>Total</th></tr></thead><tbody>'
+      +D.provs.map(function(T){return '<tr><td>'+esc(T.n)+'</td><td>'+esc(T.j)+'</td><td>'+T.nInc+'</td><td>₡'+money(T.inc)+'</td></tr>'}).join('')
+      +'<tr><td colspan="3"><b>Total general</b></td><td><b>₡'+money(D.total)+'</b></td></tr></tbody></table></div></div>';
+  }
+  h+='<p class="mu" style="margin:0 0 8px">Lo que desmarques aquí se guarda y queda automáticamente sin seleccionar en el resumen de la declaración trimestral.</p>';
+  h+='<div class="btn-bar" style="margin:0"><button type="button" class="pri" onclick="d270Imprimir()">📄 Presentar / Imprimir</button><button type="button" class="pri sec" onclick="d270CSV()">📥 Descargar CSV</button></div>';
+  return h;
+}
+function d270Imprimir(){
+  var D=d270Data(),th='style="text-align:left;border-bottom:1px solid #999"',thr='style="text-align:right;border-bottom:1px solid #999"';
+  var html='<div style="font-family:sans-serif;color:#000"><h2>Declaración 270 · Compras sin factura electrónica · Little Nani</h2><p>Periodo: '+shDot(D_D)+' – '+shDot(D_H)+'</p>';
+  D.months.forEach(function(M){
+    var rows=M.provs.map(function(P){var n=P.items.filter(function(i){return !i.ex270}).length;return n?'<tr><td style="padding:3px 0">'+esc(P.n)+'</td><td>'+esc(P.j)+'</td><td style="text-align:right">'+n+'</td><td style="text-align:right">₡'+money(P.inc)+'</td></tr>':''}).join('');
+    html+='<h3 style="margin-bottom:4px">'+imMesTxt(M.m)+'</h3>'+(rows?'<table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th '+th+'>Proveedor</th><th '+th+'>Cédula</th><th '+thr+'>Facturas</th><th '+thr+'>Monto</th></tr>'+rows+'<tr><td colspan="3" style="border-top:1px solid #999"><b>Total del mes</b></td><td style="text-align:right;border-top:1px solid #999"><b>₡'+money(M.total)+'</b></td></tr></table>':'<p style="font-size:12px">Sin facturas incluidas.</p>');
+  });
+  html+='<h3>Total por proveedor</h3><table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th '+th+'>Proveedor</th><th '+th+'>Cédula</th><th '+thr+'>Facturas</th><th '+thr+'>Monto</th></tr>'
+    +D.provs.filter(function(T){return T.nInc}).map(function(T){return '<tr><td style="padding:3px 0">'+esc(T.n)+'</td><td>'+esc(T.j)+'</td><td style="text-align:right">'+T.nInc+'</td><td style="text-align:right">₡'+money(T.inc)+'</td></tr>'}).join('')
+    +'<tr><td colspan="3" style="border-top:1px solid #999"><b>Total general</b></td><td style="text-align:right;border-top:1px solid #999"><b>₡'+money(D.total)+'</b></td></tr></table>'
+    +'<div style="margin-top:16px;font-size:11px;color:#444">Incluye facturas pendientes de pago. Emitido el '+shDot(today())+'.</div></div>';
+  var la=$('print-label-area');if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
+  la.innerHTML=html;window.print();
+}
+function d270CSV(){
+  var D=d270Data(),q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"'};
+  var rows=[['DECLARACIÓN 270 · COMPRAS SIN FACTURA ELECTRÓNICA',shDot(D_D)+' - '+shDot(D_H)],['Total general',D.total],[],['RESUMEN POR MES Y PROVEEDOR'],['Mes','Proveedor','Cédula','Facturas incluidas','Monto incluido']];
+  D.months.forEach(function(M){M.provs.forEach(function(P){var n=P.items.filter(function(i){return !i.ex270}).length;if(n)rows.push([imMesTxt(M.m),P.n,P.j,n,P.inc])})});
+  rows.push([],['TOTAL POR PROVEEDOR'],['Proveedor','Cédula','Facturas','Monto']);
+  D.provs.forEach(function(T){if(T.nInc)rows.push([T.n,T.j,T.nInc,T.inc])});
+  rows.push(['Total general','','',D.total],[],['DETALLE DE FACTURAS'],['Fecha','Proveedor','Cédula','Monto','Incluida']);
+  D.months.forEach(function(M){M.provs.forEach(function(P){P.items.forEach(function(i){rows.push([shDot(i.d),P.n,P.j,i.a,i.ex270?'No':'Sí'])})})});
+  var b=new Blob(['\ufeff'+rows.map(function(r){return r.map(q).join(',')}).join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download='declaracion-270-'+D_D+'_'+D_H+'.csv';document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+}
+function d270Section(){
+  d270Init();
+  var qs=['T1 Ene–Mar','T2 Abr–Jun','T3 Jul–Sep','T4 Oct–Dic'].map(function(t,q){var on=D_D===iso(new Date(D_Y,q*3,1))&&D_H===iso(new Date(D_Y,q*3+3,0));return '<button type="button" class="pri'+(on?'':' sec')+'" onclick="d270Q('+D_Y+','+q+')">'+t+'</button>'}).join('');
+  var anual=D_D===iso(new Date(D_Y,0,1))&&D_H===iso(new Date(D_Y,11,31));
+  return '<div class="dash-hero vino"><div class="eyebrow">Hacienda · Declaración 270</div><div class="amount">₡'+money(d270Data().total)+'</div><div style="font-weight:650">Compras sin factura electrónica del periodo</div><div class="sub">'+shDot(D_D)+' – '+shDot(D_H)+'</div></div>'
+    +'<div class="dash-section"><h2>Periodo</h2><div class="dash-panel"><div class="row-fm" style="margin-bottom:8px"><div><label class="fld-lbl">Año</label><input type="number" inputmode="numeric" value="'+D_Y+'" onchange="d270SetY(this.value)"></div><div></div></div>'
+    +'<div class="btn-bar" style="margin:0 0 8px">'+qs+'<button type="button" class="pri'+(anual?'':' sec')+'" onclick="d270Q('+D_Y+',-1)">Año completo</button></div>'
+    +'<div class="row"><div><label class="fld-lbl">Desde</label><input type="date" value="'+D_D+'" onchange="d270SetR(0,this.value)"></div><div><label class="fld-lbl">Hasta</label><input type="date" value="'+D_H+'" onchange="d270SetR(1,this.value)"></div></div></div></div>'
+    +'<div id="d_box">'+d270Box()+'</div>';
+}
+/* ===== fin DECLARACIÓN 270 ===== */
+
+function impuestosSection(){
+  imInit();
+  var h='<div class="btn-bar" style="margin:0 0 10px"><button type="button" class="pri'+(IM_Sub==='tri'?'':' sec')+'" onclick="imSub(\'tri\')">Declaración trimestral</button><button type="button" class="pri'+(IM_Sub==='d270'?'':' sec')+'" onclick="imSub(\'d270\')">Declaración 270</button></div>';
+  return h+(IM_Sub==='d270'?d270Section():imTrimestral());
 }
 /* ===== fin IMPUESTOS ===== */
 
