@@ -673,6 +673,14 @@ function PV(){
   var m={},l=[];S.items.filter(function(i){return i.t==='f'}).forEach(function(i){var n=(i.n||'').trim(),k=n.toLowerCase();if(k&&!m[k]){m[k]=1;l.push([k,n])}});
   l.sort(function(a,b){return a[0]<b[0]?-1:1});return [['','Todos los proveedores']].concat(l);
 }
+function provDL(){
+  var m={},l=[];
+  function add1(x){var n=(x||'').trim(),k=n.toLowerCase();if(k&&!m[k]){m[k]=1;l.push(n)}}
+  S.items.forEach(function(i){if(i.t==='f')add1(i.n)});
+  (S.cxp||[]).forEach(function(c){add1(c.p)});
+  l.sort(function(a,b){return a.toLowerCase()<b.toLowerCase()?-1:1});
+  return '<datalist id="prov-dl">'+l.map(function(n){return '<option value="'+esc(n)+'">'}).join('')+'</datalist>';
+}
 function CJ(){
   var m={},l=[];S.items.filter(function(i){return i.t==='f'}).forEach(function(i){var j=(i.j||'').trim(),k=j.replace(/\D/g,'');if(k&&!m[k]){m[k]=1;l.push([k,j+(i.n?' · '+i.n.trim():'')])}});
   l.sort(function(a,b){return a[0]<b[0]?-1:1});return [['','Todas las cédulas']].concat(l);
@@ -2862,7 +2870,7 @@ function form(t,ei){
   var lblBtn = ei ? 'Guardar cambios' : (t==='f' ? 'Registrar factura' : 'Registrar gasto');
   return '<h2>'+(ei?'Editar registro':'Registrar '+TT[t].toLowerCase().slice(0,-1))+'</h2>'
     +'<div class="dash-panel">'+ocrUI(t,ei)+'<div class="row-fm"><div><label class="fld-lbl">Fecha</label><input id="d" type="date" value="'+(ei?ei.d:today())+'"></div><div><label class="fld-lbl">Monto</label><input id="a" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="'+(ei?ei.a:'')+'"></div></div>'
-    +'<label class="fld-lbl">'+(t==='f'?'Proveedor':'Detalle o concepto')+'</label><input id="n" placeholder="'+(t==='f'?'Nombre del proveedor':'Descripción...')+'" value="'+(ei?esc(ei.n):'')+'">'
+    +'<label class="fld-lbl">'+(t==='f'?'Proveedor':'Detalle o concepto')+'</label><input id="n"'+(t==='f'?' list="prov-dl" autocomplete="off"':'')+' placeholder="'+(t==='f'?'Escribe o elige un proveedor':'Descripción...')+'" value="'+(ei?esc(ei.n):'')+'">'+(t==='f'?provDL():'')
     +cat+el+'<button class="pri" onclick="add(\''+t+'\')">'+lblBtn+'</button>'
     +(ei?'<button type="button" class="pri sec" style="margin-top:8px" onclick="ed=null;render()">Cancelar</button>':'')+'</div>';
 }
