@@ -168,7 +168,7 @@ var DV_SEARCH_Q='';
 var DV_Limit=20;
 var DV_Today=false;
 var CR_Limit=50;
-var CATS=['Gasolina','Comida','Servicios Publicos','Pago Casa','Publicidad','Envíos','Ahorro Casa','Ahorro Viaje','Ahorro Niños','Entretenimiento','Otros','Fondo Casa','Gastos Casa'];
+var CATS=['Gasolina','Comida','Servicios Publicos','Pago Casa','Publicidad','Envíos','Ahorro Casa','Ahorro Viaje','Ahorro Niños','Entretenimiento','Otros','Fondo Casa','Gastos Casa','Fondo Impuestos','Pago Impuestos'];
 var $=function(i){return document.getElementById(i)};
 var pad=function(n){return(n<10?'0':'')+n};
 var iso=function(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
@@ -182,7 +182,7 @@ var W=wk(today());
 var N=new Date(),PF=iso(new Date(N.getFullYear(),N.getMonth(),1)),PT=iso(new Date(N.getFullYear(),N.getMonth()+1,0));
 var money=function(n){return (n||0).toLocaleString('es',{minimumFractionDigits:2,maximumFractionDigits:2})};
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
-function sum(a,incluirFondoCasa){var r={v:0,f:0,g:0};a.forEach(function(i){if(!incluirFondoCasa&&i.c==='Fondo Casa')return;r[i.t]+=i.a});r.b=r.v-r.f-r.g;return r}
+function sum(a,incluirFondoCasa){var r={v:0,f:0,g:0};a.forEach(function(i){if(!incluirFondoCasa&&esFondo(i))return;r[i.t]+=i.a});r.b=r.v-r.f-r.g;return r}
 function cls(n){return n<0?'neg':'pos'}
 
 var C='',P='';
@@ -591,7 +591,7 @@ function impCreditos(el) {
 }
 
 function cat(a,t,incl){a=a||S.items;
-  var cs={},k,tot=0;a.forEach(function(i){if(i.t==='g'){var c=i.c||'Sin categoría';if(c==='Fondo Casa'&&!incl)return;cs[c]=(cs[c]||0)+i.a;tot+=i.a}});
+  var cs={},k,tot=0;a.forEach(function(i){if(i.t==='g'){var c=i.c||'Sin categoría';if((c==='Fondo Casa'||c==='Fondo Impuestos')&&!incl)return;cs[c]=(cs[c]||0)+i.a;tot+=i.a}});
   k=Object.keys(cs).sort(function(a,b){return cs[b]-cs[a]});
   if(!k.length)return '';
   var mx=cs[k[0]]||1;
@@ -653,7 +653,7 @@ function CJ(){
 function opt(l,v){return l.map(function(p){return '<option value="'+esc(p[0])+'"'+(v===p[0]?' selected':'')+'>'+esc(p[1])+'</option>'}).join('')}
 
 function search(){
-  var T=[['','Todos'],['v','Ventas'],['f','Facturas'],['g','Gastos']],C=[['','Todas']].concat(CATS.filter(function(c){return c!=='Fondo Casa'}).map(function(c){return [c,c]}));
+  var T=[['','Todos'],['v','Ventas'],['f','Facturas'],['g','Gastos']],C=[['','Todas']].concat(CATS.filter(function(c){return c!=='Fondo Casa'&&c!=='Fondo Impuestos'}).map(function(c){return [c,c]}));
   if(Q.currentMonth){
     var now = new Date();
     Q.f = iso(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -1873,12 +1873,12 @@ function detallesVentasSection(){
 
 function resumenMesData(desde,hasta){
   var r={v:0,f:0,g:0};
-  S.items.forEach(function(i){if(!i||!i.d||i.d<desde||i.d>hasta)return;if(i.c==='Fondo Casa')return;if(r[i.t]!==undefined)r[i.t]+=Number(i.a)||0});
+  S.items.forEach(function(i){if(!i||!i.d||i.d<desde||i.d>hasta)return;if(esFondo(i))return;if(r[i.t]!==undefined)r[i.t]+=Number(i.a)||0});
   r.b=r.v-r.f-r.g;return r;
 }
 function resumenFlujo(desde,hasta){
   var entradas=0,salidasGastos=0,salidasFacturas=0;
-  S.items.forEach(function(i){if(!i||!i.d||i.d<desde||i.d>hasta||i.c==='Fondo Casa')return;
+  S.items.forEach(function(i){if(!i||!i.d||i.d<desde||i.d>hasta||esFondo(i))return;
     if(i.t==='v')entradas+=Number(i.a)||0;
     if(i.t==='g')salidasGastos+=Number(i.a)||0;
   });
@@ -2293,7 +2293,7 @@ var RC_Mes='';
 function rcMes(){if(RC_Mes)return RC_Mes;var d=new Date();d.setMonth(d.getMonth()-1);RC_Mes=iso(d).slice(0,7);return RC_Mes}
 function rcMesTxt(m){var MN=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];return MN[+m.slice(5)-1]+' '+m.slice(0,4)}
 function rcDatos(m){
-  var l=S.items.filter(function(i){return i.d&&i.d.slice(0,7)===m&&i.c!=='Fondo Casa'}).sort(function(a,b){return a.d<b.d?-1:1});
+  var l=S.items.filter(function(i){return i.d&&i.d.slice(0,7)===m&&!esFondo(i)}).sort(function(a,b){return a.d<b.d?-1:1});
   var tv=0,tf=0,tg=0,fe=0,fn=0,provs={},cats={};
   l.forEach(function(i){
     if(i.t==='v')tv+=i.a;
@@ -2358,10 +2358,184 @@ function rcBox(){
     +'<button type="button" class="pri sec" onclick="expReporteContadorCSV()">📥 Descargar CSV</button></div>';
 }
 
-var TT={v:'Ventas',f:'Facturas',g:'Gastos',r:'Resumen',q:'Reportes',ah:'Ahorros',cr:'Apartados'};
+/* ===== IMPUESTOS (Régimen Simplificado) ===== */
+var IM_D='',IM_H='',IM_Y=0,IM_ExP={},IM_ExT={},IM_Open={},IM_C=null;
+function esFondo(i){return !!i&&(i.c==='Fondo Casa'||i.c==='Fondo Impuestos')}
+function imInit(){if(IM_D)return;var n=new Date();imQ(n.getFullYear(),Math.floor(n.getMonth()/3),true)}
+function imQ(y,q,noRender){y=+y||new Date().getFullYear();IM_Y=y;IM_D=iso(new Date(y,q*3,1));IM_H=iso(new Date(y,q*3+3,0));IM_ExP={};IM_ExT={};IM_Open={};if(!noRender)render()}
+function imSetY(v){v=+v;if(!v||v<2000||v>2100)return;var q=Math.floor((+IM_D.slice(5,7)-1)/3);imQ(v,q)}
+function imSetR(k,v){if(!v)return;if(k)IM_H=v;else IM_D=v;if(IM_D>IM_H){if(k)IM_D=v;else IM_H=v}IM_Y=+IM_D.slice(0,4);IM_ExP={};IM_ExT={};IM_Open={};render()}
+function imNorm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
+function imData(d,h,useEx){
+  var fs=S.items.filter(function(i){return i&&i.t==='f'&&i.d&&i.d>=d&&i.d<=h}).sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:0});
+  var n2c={};
+  S.items.forEach(function(i){if(i&&i.t==='f'&&i.j&&String(i.j).trim()){var k=imNorm(i.n);if(k&&!n2c[k])n2c[k]=String(i.j).trim()}});
+  var map={},list=[];
+  fs.forEach(function(i,ix){
+    var nm=(i.n||'').trim()||'Sin proveedor',ced=(i.j&&String(i.j).trim())||n2c[imNorm(i.n)]||'';
+    var key=ced?'c:'+imNorm(ced).replace(/ /g,''):'n:'+(imNorm(nm)||'sin proveedor');
+    var p=map[key];
+    if(!p){p=map[key]={key:key,j:ced,names:{},e:[],ne:[]};list.push(p)}
+    p.names[nm]=(p.names[nm]||0)+1;
+    (i.e?p.e:p.ne).push(ix);
+  });
+  var T={items:fs,provs:list,e:0,ne:0,exc:0,nF:0};
+  list.forEach(function(p){
+    var best='',bc=0;Object.keys(p.names).forEach(function(k){if(p.names[k]>bc){bc=p.names[k];best=k}});p.n=best;
+    p.eInc=0;p.eAll=0;p.nInc=0;p.nAll=0;
+    ['e','ne'].forEach(function(f){p[f].forEach(function(ix){
+      var i=fs[ix],a=Number(i.a)||0,inc=!(useEx&&(IM_ExP[p.key]||IM_ExT[i.id]));
+      if(f==='e'){p.eAll+=a;if(inc){p.eInc+=a;T.nF++}}else{p.nAll+=a;if(inc){p.nInc+=a;T.nF++}}
+      if(!inc)T.exc+=a;
+    })});
+    p.eInc=r2(p.eInc);p.nInc=r2(p.nInc);p.eAll=r2(p.eAll);p.nAll=r2(p.nAll);p.inc=r2(p.eInc+p.nInc);
+    T.e+=p.eInc;T.ne+=p.nInc;
+  });
+  T.e=r2(T.e);T.ne=r2(T.ne);T.exc=r2(T.exc);T.total=r2(T.e+T.ne);
+  list.sort(function(a,b){return (b.eAll+b.nAll)-(a.eAll+a.nAll)});
+  list.forEach(function(p,ix){p.idx=ix});
+  return T;
+}
+function imTogP(ix){var p=IM_C.provs[ix];if(!p)return;if(IM_ExP[p.key])delete IM_ExP[p.key];else IM_ExP[p.key]=1;imRefresh()}
+function imTogT(ix){var i=IM_C.items[ix];if(!i)return;if(IM_ExT[i.id])delete IM_ExT[i.id];else IM_ExT[i.id]=1;imRefresh()}
+function imTogOpen(ix,f){var p=IM_C.provs[ix];if(!p)return;var k=p.key+'|'+f;if(IM_Open[k])delete IM_Open[k];else IM_Open[k]=1;imRefresh()}
+function imRefresh(){var b=$('im_box');if(b)b.innerHTML=imBox()}
+function imBlock(T,f,titulo,color){
+  var rows='',n=0,sub=0;
+  T.provs.forEach(function(p){
+    if(!p[f].length)return;n++;
+    var inc=f==='e'?p.eInc:p.nInc,all=f==='e'?p.eAll:p.nAll,ex=!!IM_ExP[p.key],k=p.key+'|'+f,op=!!IM_Open[k];
+    sub+=inc;
+    rows+='<div class="it" style="'+(ex?'opacity:.55':'')+'"><input type="checkbox" style="width:auto;margin:0;flex:none;transform:scale(1.25)" '+(ex?'':'checked')+' onchange="imTogP('+p.idx+')" title="Incluir proveedor"><div class="t"><b>'+esc(p.n)+'</b><small>'+(p.j?'Céd. '+esc(p.j)+' · ':'')+p[f].length+' factura(s)'+(inc!==all?' · ₡'+money(all)+' en total, ₡'+money(all-inc)+' excluido':'')+'</small></div><b>₡'+money(inc)+'</b><button type="button" onclick="imTogOpen('+p.idx+',\''+f+'\')">'+(op?'Ocultar':'Ver')+'</button></div>';
+    if(op){
+      p[f].forEach(function(ix){
+        var i=T.items[ix],cx=cxGet(i.id),pen=cx&&cxSaldo(cx)>0,tx=!!IM_ExT[i.id];
+        rows+='<div class="it" style="margin-left:22px;font-size:13px;'+((ex||tx)?'opacity:.55':'')+'"><input type="checkbox" style="width:auto;margin:0;flex:none;transform:scale(1.15)" '+((ex||tx)?'':'checked')+(ex?' disabled':'')+' onchange="imTogT('+ix+')" title="Incluir esta factura"><div class="t">'+shDot(i.d)+(pen?'<span class="bd">Pendiente</span>':'')+'</div><span>₡'+money(i.a)+'</span></div>';
+      });
+    }
+  });
+  return '<div class="dash-section"><h2>'+titulo+'</h2><div class="dash-panel"><div class="dash-tile" style="margin-bottom:8px"><span class="label">Suma del bloque</span><strong class="'+color+'">₡'+money(r2(sub))+'</strong><small>'+n+' proveedor(es)</small></div>'+(rows||'<p class="mu" style="margin:4px 0">Sin facturas en este periodo.</p>')+'</div></div>';
+}
+function imBox(){
+  var T=imData(IM_D,IM_H,true);IM_C=T;
+  var h='<div class="dash-grid" style="margin:6px 0 10px"><div class="dash-tile dash-wide"><span class="label">Total de compras del periodo</span><strong>₡'+money(T.total)+'</strong><small>'+T.nF+' factura(s) incluidas (con las pendientes de pago)'+(T.exc>0?' · ₡'+money(T.exc)+' excluido':'')+'</small></div>'
+    +'<div class="dash-tile"><span class="label">Con factura electrónica</span><strong class="pos">₡'+money(T.e)+'</strong></div>'
+    +'<div class="dash-tile"><span class="label">Sin factura electrónica</span><strong class="neg">₡'+money(T.ne)+'</strong></div></div>';
+  h+=imBlock(T,'e','Proveedores con factura electrónica','pos')+imBlock(T,'ne','Proveedores sin factura electrónica','neg');
+  h+='<p class="mu" style="margin:0 0 8px">Desmarca un proveedor o una factura para excluirlo del cálculo. Las exclusiones solo valen mientras tengas esta pantalla abierta.</p>';
+  h+='<div class="btn-bar" style="margin:0"><button type="button" class="pri" onclick="imImprimir()">🖨️ Imprimir / PDF</button><button type="button" class="pri sec" onclick="imCSV()">📥 Descargar CSV</button></div>';
+  return h;
+}
+function imFilas(T){
+  var out={e:[],ne:[]};
+  T.provs.forEach(function(p){['e','ne'].forEach(function(f){if(p[f].length)out[f].push({p:p,inc:f==='e'?p.eInc:p.nInc,all:f==='e'?p.eAll:p.nAll,n:p[f].length})})});
+  return out;
+}
+function imImprimir(){
+  var T=imData(IM_D,IM_H,true),F=imFilas(T);
+  var tb=function(a){return a.length?'<table style="width:100%;border-collapse:collapse;font-size:12px"><tr><th style="text-align:left;border-bottom:1px solid #999">Proveedor</th><th style="text-align:left;border-bottom:1px solid #999">Cédula</th><th style="text-align:right;border-bottom:1px solid #999">Facturas</th><th style="text-align:right;border-bottom:1px solid #999">Monto</th></tr>'+a.map(function(x){return '<tr><td style="padding:3px 0">'+esc(x.p.n)+'</td><td>'+esc(x.p.j)+'</td><td style="text-align:right">'+x.n+'</td><td style="text-align:right">₡'+money(x.inc)+'</td></tr>'}).join('')+'</table>':'<p>Sin facturas.</p>'};
+  var html='<div style="font-family:sans-serif;color:#000"><h2>Resumen de compras por proveedor · Little Nani</h2><p>Periodo: '+shDot(IM_D)+' – '+shDot(IM_H)+'</p>'
+    +'<div style="border:1px solid #999;padding:8px;border-radius:6px;margin-bottom:8px">Total de compras: <b>₡'+money(T.total)+'</b><br>Con factura electrónica: <b>₡'+money(T.e)+'</b><br>Sin factura electrónica: <b>₡'+money(T.ne)+'</b>'+(T.exc>0?'<br>Excluido del cálculo: ₡'+money(T.exc):'')+'</div>'
+    +'<h3>Proveedores con factura electrónica</h3>'+tb(F.e)+'<h3>Proveedores sin factura electrónica</h3>'+tb(F.ne)
+    +'<div style="margin-top:16px;font-size:11px;color:#444">Incluye facturas pendientes de pago. Emitido el '+shDot(today())+'.</div></div>';
+  var la=$('print-label-area');if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
+  la.innerHTML=html;window.print();
+}
+function imCSV(){
+  var T=imData(IM_D,IM_H,true),F=imFilas(T),q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"'};
+  var rows=[['RESUMEN DE COMPRAS POR PROVEEDOR',shDot(IM_D)+' - '+shDot(IM_H)],['Total de compras',T.total],['Con factura electrónica',T.e],['Sin factura electrónica',T.ne],['Excluido',T.exc],[],['PROVEEDORES CON FACTURA ELECTRÓNICA'],['Proveedor','Cédula','Facturas','Monto incluido','Monto total']]
+    .concat(F.e.map(function(x){return [x.p.n,x.p.j,x.n,x.inc,x.all]}),[[],['PROVEEDORES SIN FACTURA ELECTRÓNICA'],['Proveedor','Cédula','Facturas','Monto incluido','Monto total']],F.ne.map(function(x){return [x.p.n,x.p.j,x.n,x.inc,x.all]}),
+    [[],['DETALLE DE FACTURAS'],['Fecha','Proveedor','Cédula','Electrónica','Monto','Pendiente de pago','Incluida']]);
+  T.provs.forEach(function(p){['e','ne'].forEach(function(f){p[f].forEach(function(ix){var i=T.items[ix],cx=cxGet(i.id);rows.push([shDot(i.d),p.n,p.j,f==='e'?'Sí':'No',i.a,(cx&&cxSaldo(cx)>0)?'Sí':'No',(IM_ExP[p.key]||IM_ExT[i.id])?'No':'Sí'])})})});
+  var b=new Blob(['\ufeff'+rows.map(function(r){return r.map(q).join(',')}).join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download='impuestos-compras-'+IM_D+'_'+IM_H+'.csv';document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},2000);
+}
+function imFondoItems(){return S.items.filter(function(i){return i&&i.c==='Fondo Impuestos'})}
+function imAcum(){return r2(imFondoItems().reduce(function(s,i){return s+(Number(i.a)||0)},0))}
+function imNewId(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function imApartar(){
+  var m=parseFloat(String($('im_ap').value).replace(',','.')),d=$('im_apd').value||today();
+  if(!(m>0)){$('st').textContent='Indica un monto mayor a 0';return}
+  var w=wk(d),ya=S.items.some(function(i){return i&&i.c==='Fondo Impuestos'&&Number(i.a)>0&&!i.imLiq&&i.d&&wk(i.d)===w});
+  if(ya&&!confirm('Esa semana ya tiene un apartado de impuestos. ¿Registrar otro?'))return;
+  put({id:imNewId('imp-'),t:'g',d:d,n:'Apartado semanal Impuestos',c:'Fondo Impuestos',a:r2(m)});
+  $('st').textContent='Apartado de impuestos guardado';render();
+}
+function imLiquidar(){
+  var ac=Math.max(0,imAcum());
+  if(!(ac>0)){$('st').textContent='No hay sobrante por liquidar';return}
+  if(!confirm('¿Liquidar el sobrante de ₡'+money(ac)+' y devolverlo al saldo global como entrada? El fondo quedará en cero.'))return;
+  put({id:imNewId('impl-'),t:'g',d:today(),n:'Sobrante de impuestos liquidado: devuelto al saldo global',c:'Fondo Impuestos',a:-ac,imLiq:1});
+  $('st').textContent='Sobrante liquidado y devuelto al saldo global';render();
+}
+function imDeclarar(){
+  var f=$('im_df').value,dd=$('im_dd').value,dh=$('im_dh').value,raw=String($('im_dm').value).replace(',','.'),m=parseFloat(raw),liq=$('im_dl').checked;
+  if(!f||!dd||!dh||!(m>0)){$('st').textContent='Indica fecha, periodo y un monto pagado mayor a 0';return}
+  if(dd>dh){var t=dd;dd=dh;dh=t}
+  m=r2(m);var ac=Math.max(0,imAcum()),usar=r2(Math.min(m,ac)),sob=r2(ac-usar),falt=r2(m-usar),per=shDot(dd)+' – '+shDot(dh);
+  var msg='Se registrará el pago de ₡'+money(m)+' a Hacienda (periodo '+per+') y se rebajará del saldo global.';
+  if(falt>0)msg+='\nSupera lo ahorrado por ₡'+money(falt)+'.';
+  if(sob>0)msg+='\n'+(liq?'El sobrante de ₡'+money(sob)+' se liquidará y volverá al saldo global como entrada.':'El sobrante de ₡'+money(sob)+' quedará acumulado para el próximo periodo.');
+  if(!confirm(msg+'\n\n¿Continuar?'))return;
+  var comp=imData(dd,dh,dd===IM_D&&dh===IM_H).total,id=imNewId('impd-');
+  put({id:id,t:'g',d:f,n:'Declaración Hacienda: '+per,c:'Pago Impuestos',a:m,imp:1,impD:dd,impH:dh,impCompras:comp,impUsado:usar,impLiq:(liq&&sob>0)?sob:0});
+  if(usar>0)put({id:imNewId('impr-'),t:'g',d:f,n:'Fondo aplicado a declaración '+per,c:'Fondo Impuestos',a:-usar,impRef:id});
+  if(liq&&sob>0)put({id:imNewId('impl-'),t:'g',d:f,n:'Sobrante de impuestos liquidado: devuelto al saldo global',c:'Fondo Impuestos',a:-sob,imLiq:1,impRef:id});
+  $('st').textContent='Declaración registrada';render();
+}
+function imDel(id){
+  if(!confirm('¿Eliminar este registro? Si es una declaración, también se eliminan sus movimientos del fondo.'))return;
+  var ids=[id];S.items.forEach(function(i){if(i&&i.impRef===id)ids.push(i.id)});
+  ids.forEach(function(x){rm(x)});render();
+}
+function impuestosSection(){
+  imInit();
+  var ac=imAcum(),h='',wNow=wk(today());
+  var tieneSem=S.items.some(function(i){return i&&i.c==='Fondo Impuestos'&&Number(i.a)>0&&!i.imLiq&&i.d&&wk(i.d)===wNow});
+  h+='<div class="dash-hero ambar"><div class="eyebrow">Régimen Simplificado · Hacienda</div><div class="amount">'+money(Math.max(0,ac))+'</div><div style="font-weight:650">Ahorrado para la próxima declaración</div><div class="sub">Cuenta como gasto de la semana, pero no se rebaja del balance global hasta que presentes la declaración.</div></div>';
+  if(!RO){
+    h+='<div class="dash-section"><h2>Apartar de esta semana</h2><div class="dash-panel">'
+      +(tieneSem?'':'<p style="margin:0 0 8px;color:var(--wn);font-weight:600">⚠️ La semana actual ('+wl(wNow)+') aún no tiene apartado de impuestos.</p>')
+      +'<div class="row-fm"><div><label class="fld-lbl">Fecha</label><input id="im_apd" type="date" value="'+today()+'"></div><div><label class="fld-lbl">Monto sugerido</label><input id="im_ap" type="number" inputmode="decimal" step="0.01" min="0" value="30000"></div></div>'
+      +'<button class="pri" onclick="imApartar()">Apartar para impuestos</button></div></div>';
+  }
+  h+='<div class="dash-section"><h2>Resumen de compras por proveedor</h2><div class="dash-panel"><label class="fld-lbl">Periodo (trimestre rápido)</label>'
+    +'<div class="row-fm" style="margin-bottom:8px"><div><label class="fld-lbl">Año</label><input type="number" inputmode="numeric" value="'+IM_Y+'" onchange="imSetY(this.value)"></div><div></div></div>'
+    +'<div class="btn-bar" style="margin:0 0 8px">'+['T1 Ene–Mar','T2 Abr–Jun','T3 Jul–Sep','T4 Oct–Dic'].map(function(t,q){var on=IM_D===iso(new Date(IM_Y,q*3,1))&&IM_H===iso(new Date(IM_Y,q*3+3,0));return '<button type="button" class="pri'+(on?'':' sec')+'" onclick="imQ('+IM_Y+','+q+')">'+t+'</button>'}).join('')+'</div>'
+    +'<div class="row"><div><label class="fld-lbl">Desde</label><input type="date" value="'+IM_D+'" onchange="imSetR(0,this.value)"></div><div><label class="fld-lbl">Hasta</label><input type="date" value="'+IM_H+'" onchange="imSetR(1,this.value)"></div></div>'
+    +'<div id="im_box">'+imBox()+'</div></div></div>';
+  if(!RO){
+    h+='<div class="dash-section"><h2>Registrar declaración</h2><div class="dash-panel"><div class="row"><div><label class="fld-lbl">Fecha de presentación</label><input id="im_df" type="date" value="'+today()+'"></div><div><label class="fld-lbl">Monto pagado</label><input id="im_dm" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></div></div>'
+      +'<div class="row"><div><label class="fld-lbl">Periodo desde</label><input id="im_dd" type="date" value="'+IM_D+'"></div><div><label class="fld-lbl">Periodo hasta</label><input id="im_dh" type="date" value="'+IM_H+'"></div></div>'
+      +'<label class="chk"><input type="checkbox" id="im_dl"> Liquidar el sobrante y devolverlo al saldo global como entrada</label>'
+      +'<button class="pri" onclick="imDeclarar()">Registrar declaración</button>'
+      +(ac>0?'<button type="button" class="pri sec" style="margin-top:8px" onclick="imLiquidar()">💰 Liquidar sobrante (₡'+money(ac)+') al saldo global</button>':'')+'</div></div>';
+  }
+  var ds=S.items.filter(function(i){return i&&i.c==='Pago Impuestos'&&i.imp}).sort(function(a,b){return a.d<b.d?1:a.d>b.d?-1:0});
+  h+='<div class="dash-section"><h2>Historial de declaraciones ('+ds.length+')</h2><div class="dash-panel">';
+  if(!ds.length)h+='<p class="mu" style="margin:4px 0">Aún no has registrado declaraciones.</p>';
+  ds.forEach(function(i){
+    h+='<div class="it"><div class="t"><b>₡'+money(i.a)+'</b><span class="bd ok">Pagada</span><small>'+shDot(i.d)+' · Periodo '+shDot(i.impD)+' – '+shDot(i.impH)+'</small><small>Compras del periodo: ₡'+money(i.impCompras||0)+' · Del fondo: ₡'+money(i.impUsado||0)+((i.impLiq>0)?' · Sobrante devuelto al saldo global: ₡'+money(i.impLiq):'')+'</small></div>'+(RO?'':'<button class="bad" onclick="imDel(\''+i.id+'\')">Borrar</button>')+'</div>';
+  });
+  h+='</div></div>';
+  var fi=imFondoItems().sort(function(a,b){return a.d<b.d?1:a.d>b.d?-1:0});
+  h+='<div class="dash-section"><h2>Movimientos del fondo ('+fi.length+')</h2><div class="dash-panel">';
+  if(!fi.length)h+='<p class="mu" style="margin:4px 0">Sin movimientos.</p>';
+  fi.slice(0,40).forEach(function(i){
+    var neg=Number(i.a)<0,ent=!!i.imLiq,sol=!i.impRef;
+    h+='<div class="it"><div class="t"><b class="'+(neg?'neg':'pos')+'">'+(neg?'−':'+')+'₡'+money(Math.abs(i.a))+'</b>'+(ent?'<span class="bd ok">Entrada al saldo global</span>':'')+'<small>'+shDot(i.d)+' · '+esc(i.n||'')+'</small></div>'+((RO||i.impRef)?'':'<button class="bad" onclick="imDel(\''+i.id+'\')">Borrar</button>')+'</div>';
+  });
+  if(fi.length>40)h+='<p class="mu" style="margin:6px 0">Mostrando los 40 más recientes.</p>';
+  h+='</div></div>';
+  return h;
+}
+/* ===== fin IMPUESTOS ===== */
+
+var TT={v:'Ventas',f:'Facturas',g:'Gastos',r:'Resumen',q:'Reportes',ah:'Ahorros',cr:'Apartados',im:'Impuestos'};
 
 function form(t,ei){
-  var cat=t==='g'?'<label class="fld-lbl">Categoría</label><select id="c">'+CATS.filter(function(c){return c!=='Fondo Casa'}).map(function(c){return '<option'+(ei&&ei.c===c?' selected':'')+'>'+c+'</option>'}).join('')+'</select>':'';
+  var cat=t==='g'?'<label class="fld-lbl">Categoría</label><select id="c">'+CATS.filter(function(c){return c!=='Fondo Casa'&&c!=='Fondo Impuestos'}).map(function(c){return '<option'+(ei&&ei.c===c?' selected':'')+'>'+c+'</option>'}).join('')+'</select>':'';
   var el=t==='f'?'<label class="fld-lbl">Cédula jurídica</label><input id="j" placeholder="Opcional" inputmode="numeric" value="'+(ei?esc(ei.j||''):'')+'"><label class="chk"><input type="checkbox" id="e"'+(ei&&ei.e?' checked':'')+'> Factura electrónica</label>'+(ei?'':'<label class="chk"><input type="checkbox" id="cn"> Ya está pagada (no agregar a por pagar)</label>'):'';
   var lblBtn = ei ? 'Guardar cambios' : (t==='f' ? 'Registrar factura' : 'Registrar gasto');
   return '<h2>'+(ei?'Editar registro':'Registrar '+TT[t].toLowerCase().slice(0,-1))+'</h2>'
@@ -2384,7 +2558,7 @@ function render(){
   var tot=list.reduce(function(x,i){return x+i.a},0);
   var h='<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Gestión financiera</span></div><button class="lo" onclick="out()">Salir</button></div><div class="tabs">';
   
-  ['r','v','f','g','ah','cr','q'].forEach(function(k){
+  ['r','v','f','g','ah','cr','im','q'].forEach(function(k){
     var active = (tab === k) || (tab === 'casa' && k === 'g') || (tab === 'ct' && k === 'v') || (tab === 'cx' && k === 'f');
     h+='<button class="'+(active?'on':'')+'" onclick="go(\''+k+'\')">'+TT[k]+'</button>';
   });
@@ -2397,6 +2571,7 @@ function render(){
   else if(tab==='casa') h+=gastosCasaSection();
   else if(tab==='ct') h+=cotizacionesSection();
   else if(tab==='cx') h+=cxpSection();
+  else if(tab==='im') h+=impuestosSection();
   else if(tab==='v') {
     h+=detallesVentasSection();
     setTimeout(renderArticulosTempList, 10);
@@ -2419,7 +2594,7 @@ function render(){
       h+='<div class="btn-bar"><button type="button" class="pri sec" onclick="go(\'cx\')">🧾 Cuentas por pagar'+(cn?' ('+cn+' pendiente'+(cn===1?'':'s')+')':'')+'</button></div>';
     } else if(tab==='g'){
       var ctc=casaTotales();
-      var gOperativos=list.filter(function(i){return i.c!=='Fondo Casa'}).reduce(function(s,i){return s+i.a},0);
+      var gOperativos=list.filter(function(i){return !esFondo(i)}).reduce(function(s,i){return s+i.a},0);
       h+='<div class="dash-hero vino"><div class="eyebrow">Control de egresos</div><div class="amount">'+money(tot)+'</div><div style="font-weight:650">Gastos de la semana ('+wl(W)+')</div><div class="sub">Operativos: ₡'+money(gOperativos)+' · Fondo Casa disponible: ₡'+money(ctc.disponible)+'</div></div>';
       h+='<div class="dash-grid">'
         +'<div class="dash-tile"><span class="label">Gastos operativos</span><strong>'+money(gOperativos)+'</strong><small>Semana seleccionada</small></div>'
