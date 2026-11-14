@@ -1943,6 +1943,11 @@ function geoValidate(){
   return !msg.length;
 }
 window.addEventListener('scroll',function(){if($('geo_list')&&GEO_FIELD)geoIn(GEO_FIELD)},true);
+/* Evita que la rueda del mouse cambie el valor de los campos numéricos (montos, precios, etc.) */
+document.addEventListener('wheel',function(e){
+  var t=document.activeElement;
+  if(t&&t.tagName==='INPUT'&&t.type==='number'&&(t===e.target||t.contains(e.target)))t.blur();
+},{passive:true,capture:true});
 function waFoto(inp){
   var fl=inp.files&&inp.files[0];if(!fl)return;
   if(OCR_Busy)return;OCR_Busy=true;
