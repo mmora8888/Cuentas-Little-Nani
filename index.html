@@ -2630,12 +2630,8 @@ function d270CSV(){
 }
 function d270Section(){
   d270Init();
-  var qs=['T1 Ene–Mar','T2 Abr–Jun','T3 Jul–Sep','T4 Oct–Dic'].map(function(t,q){var on=D_D===iso(new Date(D_Y,q*3,1))&&D_H===iso(new Date(D_Y,q*3+3,0));return '<button type="button" class="pri'+(on?'':' sec')+'" onclick="d270Q('+D_Y+','+q+')">'+t+'</button>'}).join('');
-  var anual=D_D===iso(new Date(D_Y,0,1))&&D_H===iso(new Date(D_Y,11,31));
   return '<div class="dash-hero vino"><div class="eyebrow">Hacienda · Declaración 270</div><div class="amount">₡'+money(d270Data().total)+'</div><div style="font-weight:650">Compras sin factura electrónica del periodo</div><div class="sub">'+shDot(D_D)+' – '+shDot(D_H)+'</div></div>'
-    +'<div class="dash-section"><h2>Periodo</h2><div class="dash-panel"><div class="row-fm" style="margin-bottom:8px"><div><label class="fld-lbl">Año</label><input type="number" inputmode="numeric" value="'+D_Y+'" onchange="d270SetY(this.value)"></div><div></div></div>'
-    +'<div class="btn-bar" style="margin:0 0 8px">'+qs+'<button type="button" class="pri'+(anual?'':' sec')+'" onclick="d270Q('+D_Y+',-1)">Año completo</button></div>'
-    +'<div class="row"><div><label class="fld-lbl">Desde</label><input type="date" value="'+D_D+'" onchange="d270SetR(0,this.value)"></div><div><label class="fld-lbl">Hasta</label><input type="date" value="'+D_H+'" onchange="d270SetR(1,this.value)"></div></div></div></div>'
+    +'<div class="dash-section"><h2>Periodo</h2><div class="dash-panel"><div class="row"><div><label class="fld-lbl">Desde</label><input type="date" value="'+D_D+'" onchange="d270SetR(0,this.value)"></div><div><label class="fld-lbl">Hasta</label><input type="date" value="'+D_H+'" onchange="d270SetR(1,this.value)"></div></div></div></div>'
     +'<div id="d_box">'+d270Box()+'</div>';
 }
 /* ===== fin DECLARACIÓN 270 ===== */
