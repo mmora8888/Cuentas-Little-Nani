@@ -3884,7 +3884,8 @@ function igCard(p){
     if(falt.length)h+='<div class="dash-alert bad">Falta: '+falt.join(', ')+'</div>';
     h+='<label class="fld-lbl">Título</label><input id="ig_t_'+id+'" value="'+esc(p.titulo)+'" placeholder="Nombre del producto"'+(!String(p.titulo||'').trim()?' style="'+bad+'"':'')+'>'
       +'<div class="row"><div><label class="fld-lbl">Precio (₡)</label><input id="ig_p_'+id+'" type="number" inputmode="decimal" min="0" step="1" value="'+(+p.precio>0?p.precio:'')+'" placeholder="Falta precio"'+(!(+p.precio>0)?' style="'+bad+'"':'')+'></div>'
-      +'<div><label class="fld-lbl">Talla (opcional)</label><input id="ig_s_'+id+'" value="'+esc(p.talla)+'" placeholder="Ej: M, 4-6 años"></div></div>'
+      +'<div><label class="fld-lbl">Cantidad en inventario</label><input id="ig_c_'+id+'" type="number" inputmode="numeric" min="1" step="1" value="'+(+p.cant>0?p.cant:1)+'"></div></div>'
+      +'<label class="fld-lbl">Talla (opcional)</label><input id="ig_s_'+id+'" value="'+esc(p.talla)+'" placeholder="Ej: M, 4-6 años">'
       +'<label class="fld-lbl">Descripción</label><textarea id="ig_d_'+id+'" rows="3">'+esc(p.desc)+'</textarea>'
       +'<details style="margin-bottom:10px"><summary class="mu" style="cursor:pointer">Texto original de la publicación</summary><div class="mu" style="white-space:pre-wrap;margin-top:6px">'+esc(p.caption)+'</div></details>'
       +'<div class="btn-bar"><button type="button" class="pri ok" onclick="igAprobar(\''+id+'\')"'+(busy?' disabled':'')+'>'+(busy?'Creando en Shopify…':'✓ Aprobar')+'</button><button type="button" class="pri bad" onclick="igRechazar(\''+id+'\')"'+(busy?' disabled':'')+'>Rechazar</button></div>';
@@ -3907,7 +3908,7 @@ function igAprobar(id){
   if(RO||IG.busyId)return;
   var p=IG.list.filter(function(x){return x.id===id})[0];if(!p)return;
   var v=function(k){var el=$('ig_'+k+'_'+id);return el?el.value.trim():''};
-  var n={titulo:v('t'),precio:parseFloat(String(v('p')).replace(',','.'))||0,talla:v('s'),desc:v('d')};
+  var n={titulo:v('t'),precio:parseFloat(String(v('p')).replace(',','.'))||0,talla:v('s'),desc:v('d'),cant:Math.max(1,parseInt(v('c'),10)||1)};
   var f=igFaltas({titulo:n.titulo,precio:n.precio,imgs:p.imgs});
   if(f.length){$('st').textContent='Falta: '+f.join(', ')+' (no se puede aprobar así)';return}
   if((n.precio<IG_MIN||n.precio>IG_MAX)&&!confirm('El precio ₡'+money(n.precio)+' se ve fuera de lo normal. ¿Aprobar de todos modos?'))return;
