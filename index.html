@@ -1730,6 +1730,8 @@ function esVentaEnvio(i){
   if(!i||i.t!=='v'||!i.dvMeta)return false;
   var v=i.dvMeta;
   if(v.tipo==='bodega')return false;
+  /* ventas antiguas que dicen "Recoge en bodega" en la dirección, sin provincia/cantón/distrito ni guía */
+  if(!String(v.guia||'').trim()&&!String(v.provincia||'').trim()&&!String(v.canton||'').trim()&&!String(v.distrito||'').trim()&&/bodega/i.test(String(v.otrosDatos||'')))return false;
   if(v.tipo==='envio')return true;
   /* registros antiguos sin tipo: solo cuentan como envío si tienen guía, dirección o envío cobrado */
   return !!(String(v.guia||'').trim()||String(v.provincia||'').trim()||String(v.canton||'').trim()||String(v.distrito||'').trim()||String(v.otrosDatos||'').trim()||(parseFloat(v.envio)||0)>0);
