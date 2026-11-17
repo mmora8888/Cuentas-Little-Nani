@@ -156,6 +156,14 @@ tfoot td{font-weight:700;border-bottom:0}
 #print-label-area{display:none}
 @page{margin:10mm}
 @media print{html,body{margin:0;padding:0;background:#fff}.lb-page:not(:last-child){break-after:page;page-break-after:always}body>*:not(#print-label-area){display:none!important}#print-label-area{display:block!important}}
+/* ===== Little Nani · Redes y Shopify (primera versión) ===== */
+.sn-wrap{display:grid;gap:14px}.sn-hero{background:linear-gradient(135deg,#244f45,#397b68);color:#fff;border-radius:18px;padding:18px}.sn-hero .sn-muted{color:rgba(255,255,255,.78)}
+.sn-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.sn-stat{background:var(--card);border:1px solid var(--bd);border-radius:13px;padding:12px}.sn-stat b{display:block;font-size:22px;margin-top:3px}
+.sn-panel{background:var(--card);border:1px solid var(--bd);border-radius:15px;padding:14px}.sn-panel h2{margin:0 0 10px}.sn-field{display:grid;gap:5px;margin:10px 0}.sn-field label{font-size:12px;font-weight:700;color:var(--mu)}.sn-field input,.sn-field textarea,.sn-field select{width:100%;box-sizing:border-box}.sn-field textarea{min-height:76px;resize:vertical}
+.sn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sn-card{border:1px solid var(--bd);border-radius:14px;padding:13px;background:var(--card);display:grid;gap:9px}.sn-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sn-pill{border-radius:99px;padding:4px 9px;font-size:11px;font-weight:750;background:var(--bg);color:var(--mu)}.sn-pill.pending{background:#fff1d6;color:#8a5b08}.sn-pill.approved{background:#dff4e8;color:#17613d}.sn-pill.discarded{background:#fbe4e4;color:#963333}
+.sn-actions{display:flex;gap:7px;flex-wrap:wrap}.sn-actions button{flex:1;min-width:100px}.sn-note{font-size:12px;color:var(--mu);line-height:1.45}.sn-empty{border:1px dashed var(--bd);border-radius:14px;padding:22px;text-align:center;color:var(--mu)}
+@media(max-width:520px){.sn-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.sn-stat{padding:9px}.sn-stat b{font-size:18px}.sn-grid{grid-template-columns:1fr}}
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -312,6 +320,7 @@ function sum(a,incluirFondoCasa){var r={v:0,f:0,g:0};a.forEach(function(i){if(!i
 function cls(n){return n<0?'neg':'pos'}
 
 var C='',P='';
+var SN=[],SN_EDIT=null,SN_FILTER='all';
 function gateView(){
   var sv='',se='';try{sv=localStorage.getItem('cn_code')||'';se=localStorage.getItem('cn_email')||''}catch(e){}
   var ky='onkeydown="if(event.key===\'Enter\')ent()"';
@@ -353,11 +362,11 @@ function recuperar(){
 }
 function out(){
   UN.forEach(function(f){f()});UN=[];S={items:[],saldo:0,casaMesCerrado:'',casaPeriodoActivo:'',casaPeriodoNombre:'',ahorros:{casa:0,viaje:0,ninos:0},cuentas:{bac_col:0,bac_usd:0,bn_col:0,bn_usd:0,bcr:0,lafise:0,promerica:0,efectivo:0,otro:0},tipoCambioUSD:0,creditos:[],cotizaciones:[],cxp:[],ajustes:[]};ready=false;C='';P='';tab='r';ed=null;pend=null;sed=false;edAh=null;CR_Q='';edCrId=null;edDvId=null;dvTipo='';DV_Q='';DV_SEARCH_Q='';DV_Limit=20;DV_Today=false;CR_Limit=50;CR_Atr=false;CR_Bod=false;CR_Ubic='';RM=null;DV_Pend=false;dvArticulosTemp=[];edCxId=null;CX_Pag=false;CX_Q='';
-  U=null;if(AUTH)AUTH.signOut();
+  U=null;SN=[];SN_EDIT=null;SN_FILTER='all';if(AUTH)AUTH.signOut();
   $('st').textContent='';render();
 }
 function conn(c){
-  UN.forEach(function(f){f()});UN=[];S={items:[],saldo:0,casaMesCerrado:'',casaPeriodoActivo:'',casaPeriodoNombre:'',ahorros:{casa:0,viaje:0,ninos:0},cuentas:{bac_col:0,bac_usd:0,bn_col:0,bn_usd:0,bcr:0,lafise:0,promerica:0,efectivo:0,otro:0},tipoCambioUSD:0,creditos:[],cotizaciones:[],cxp:[],ajustes:[]};ready=false;C=c;P='cuentas/'+c+'/';
+  UN.forEach(function(f){f()});UN=[];S={items:[],saldo:0,casaMesCerrado:'',casaPeriodoActivo:'',casaPeriodoNombre:'',ahorros:{casa:0,viaje:0,ninos:0},cuentas:{bac_col:0,bac_usd:0,bn_col:0,bn_usd:0,bcr:0,lafise:0,promerica:0,efectivo:0,otro:0},tipoCambioUSD:0,creditos:[],cotizaciones:[],cxp:[],ajustes:[]};ready=false;SN=[];SN_EDIT=null;C=c;P='cuentas/'+c+'/';
   $('st').textContent='';render();
   var er=function(e){
     if(e&&e.code==='permission-denied'){UN.forEach(function(f){f()});UN=[];C='';P='';ready=false;try{localStorage.removeItem('cn_code')}catch(x){}render();$('st').textContent='Sin permiso: revisa el código del negocio o que tu usuario esté autorizado en Firebase'}
@@ -396,6 +405,11 @@ function conn(c){
     S.cxp=q.docs.map(function(x){return x.data()}).filter(function(c){return c&&/^[\w-]+$/.test(c.id||'')});S.cxp=qApply('cxp',S.cxp);
     fr();
   },function(){}));
+
+  UN.push(FS.collection(P+'social_products').onSnapshot(function(q){
+    SN=q.docs.map(function(x){return x.data()}).filter(function(x){return x&&x.id;});
+    if(tab==='sn' && ready) render();
+  },function(e){$('st').textContent='No se pudo cargar Redes y Shopify: '+(e&&e.message||'Error')}));
 
   UN.push(FS.doc(P+'config/main').onSnapshot(function(d){
     var data=d.exists?d.data():{};
@@ -3820,7 +3834,86 @@ function impuestosSection(){
 }
 /* ===== fin IMPUESTOS ===== */
 
-var TT={v:'Ventas',f:'Facturas',g:'Gastos',r:'Resumen',q:'Reportes',ah:'Ahorros',cr:'Apartados',im:'Impuestos'};
+/* ===== REDES Y SHOPIFY · módulo inicial con datos de prueba ===== */
+function snMoney(v){return (Number(v)||0).toLocaleString('es-CR',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function snStatusLabel(st){return st==='approved'?'Aprobado':st==='discarded'?'Descartado':'Pendiente'}
+function snStatusClass(st){return st==='approved'?'approved':st==='discarded'?'discarded':'pending'}
+function snCounts(){return {all:SN.length,pending:SN.filter(function(x){return x.status==='pending'}).length,approved:SN.filter(function(x){return x.status==='approved'}).length}}
+function snEdit(id){SN_EDIT=id;render()}
+function snNew(){SN_EDIT='new';render()}
+function snCancel(){SN_EDIT=null;render()}
+function snSave(){
+  var title=($('sn_title')&&$('sn_title').value||'').trim(),price=Number(($('sn_price')&&$('sn_price').value||'').replace(',','.'));
+  if(!title){alert('Escribe el nombre del producto.');return}
+  if(!(price>0)){alert('Ingresa un precio mayor que cero en colones.');return}
+  var old=SN_EDIT&&SN_EDIT!=='new'?SN.filter(function(x){return x.id===SN_EDIT})[0]:null;
+  var id=old?old.id:('sn-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7));
+  var obj={id:id,title:title,description:($('sn_desc').value||'').trim(),price:price,sku:($('sn_sku').value||'').trim(),
+    category:($('sn_category').value||'').trim(),tags:($('sn_tags').value||'').trim(),imageUrl:($('sn_image').value||'').trim(),
+    source:($('sn_source').value||'manual'),status:old?old.status:'pending',createdAt:old&&old.createdAt?old.createdAt:new Date().toISOString(),
+    updatedAt:new Date().toISOString(),approvedAt:old&&old.approvedAt||null,shopifyProductId:old&&old.shopifyProductId||null};
+  FS.collection(P+'social_products').doc(id).set(obj,{merge:true}).then(function(){SN_EDIT=null;$('st').textContent='Ficha guardada en Redes y Shopify';render()})
+    .catch(function(e){alert('No se pudo guardar la ficha: '+(e&&e.message||e))});
+}
+function snApprove(id){
+  var x=SN.filter(function(p){return p.id===id})[0];if(!x)return;
+  if(!confirm('¿Aprobar esta ficha? Quedará lista para enviar a Shopify cuando conectemos la tienda.'))return;
+  FS.collection(P+'social_products').doc(id).set({status:'approved',approvedAt:new Date().toISOString(),updatedAt:new Date().toISOString()},{merge:true})
+    .then(function(){$('st').textContent='Ficha aprobada. Aún no se ha enviado a Shopify.'}).catch(function(e){alert('No se pudo aprobar: '+(e&&e.message||e))});
+}
+function snDiscard(id){
+  if(!confirm('¿Descartar esta ficha?'))return;
+  FS.collection(P+'social_products').doc(id).set({status:'discarded',updatedAt:new Date().toISOString()},{merge:true})
+    .then(function(){$('st').textContent='Ficha descartada'}).catch(function(e){alert('No se pudo descartar: '+(e&&e.message||e))});
+}
+function snDelete(id){
+  if(!confirm('¿Eliminar definitivamente esta ficha?'))return;
+  FS.collection(P+'social_products').doc(id).delete().then(function(){$('st').textContent='Ficha eliminada'})
+    .catch(function(e){alert('No se pudo eliminar: '+(e&&e.message||e))});
+}
+function snSeed(){
+  if(SN.some(function(x){return x.demo===true})){alert('Ya existe una ficha de demostración.');return}
+  var id='sn-demo-'+Date.now().toString(36),demo={id:id,title:'Cargador ergonómico para bebé',
+    description:'Cargador cómodo y práctico para llevar a tu bebé cerquita. Texto de ejemplo para revisar y editar antes de publicarlo.',
+    price:24900,sku:'DEMO-CARG-01',category:'Cargadores ergonómicos',tags:'bebé, cargador, Little Nani',imageUrl:'',
+    source:'instagram',status:'pending',demo:true,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),approvedAt:null,shopifyProductId:null};
+  FS.collection(P+'social_products').doc(id).set(demo).then(function(){$('st').textContent='Ficha de demostración agregada'})
+    .catch(function(e){alert('No se pudo crear la demostración: '+(e&&e.message||e))});
+}
+function socialSection(){
+  var c=snCounts(),editing=SN_EDIT!==null&&SN_EDIT!==undefined,item=editing&&SN_EDIT!=='new'?SN.filter(function(x){return x.id===SN_EDIT})[0]:null,formHtml='';
+  if(editing){
+    formHtml='<div class="sn-panel"><h2>'+(item?'Editar ficha de producto':'Nueva ficha de producto')+'</h2><div class="sn-note">Completa los datos del producto. En esta primera versión, la ficha se guarda como pendiente y no se publica en Shopify.</div>'
+      +'<div class="sn-field"><label>Nombre del producto *</label><input id="sn_title" maxlength="140" value="'+(item?esc(item.title):'')+'" placeholder="Ej. Cargador ergonómico"></div>'
+      +'<div class="sn-field"><label>Descripción</label><textarea id="sn_desc" maxlength="5000" placeholder="Descripción comercial del producto">'+(item?esc(item.description):'')+'</textarea></div>'
+      +'<div class="sn-grid"><div class="sn-field"><label>Precio (₡) *</label><input id="sn_price" type="number" min="1" step="1" value="'+(item?item.price:'')+'" placeholder="24900"></div>'
+      +'<div class="sn-field"><label>SKU</label><input id="sn_sku" maxlength="80" value="'+(item?esc(item.sku):'')+'" placeholder="Código del producto"></div></div>'
+      +'<div class="sn-grid"><div class="sn-field"><label>Categoría</label><input id="sn_category" maxlength="100" value="'+(item?esc(item.category):'')+'" placeholder="Categoría"></div>'
+      +'<div class="sn-field"><label>Origen</label><select id="sn_source"><option value="manual"'+(!item||item.source==='manual'?' selected':'')+'>Ingreso manual</option><option value="instagram"'+(item&&item.source==='instagram'?' selected':'')+'>Instagram</option><option value="facebook"'+(item&&item.source==='facebook'?' selected':'')+'>Facebook</option></select></div></div>'
+      +'<div class="sn-field"><label>Etiquetas (separadas por comas)</label><input id="sn_tags" value="'+(item?esc(item.tags):'')+'" placeholder="bebé, juguetes, Little Nani"></div>'
+      +'<div class="sn-field"><label>URL de imagen (opcional)</label><input id="sn_image" type="url" value="'+(item?esc(item.imageUrl):'')+'" placeholder="https://..."></div>'
+      +'<div class="sn-actions"><button class="pri" onclick="snSave()">Guardar ficha</button><button class="pri sec" onclick="snCancel()">Cancelar</button></div></div>';
+  }
+  var rows=SN.filter(function(x){return SN_FILTER==='all'||x.status===SN_FILTER}).sort(function(a,b){return (b.updatedAt||'').localeCompare(a.updatedAt||'')});
+  var cards=rows.map(function(x){
+    return '<article class="sn-card"><div class="sn-card-head"><span class="sn-pill '+snStatusClass(x.status)+'">'+snStatusLabel(x.status)+'</span><span class="sn-note">'+(x.source==='instagram'?'Instagram':x.source==='facebook'?'Facebook':'Ingreso manual')+'</span></div>'
+      +'<div><b>'+esc(x.title)+'</b><div class="sn-note">'+(x.category?esc(x.category)+' · ':'')+'₡'+snMoney(x.price)+'</div></div>'
+      +(x.description?'<div class="sn-note">'+esc(x.description)+'</div>':'')
+      +'<div class="sn-note">'+(x.sku?'SKU: '+esc(x.sku)+' · ':'')+(x.shopifyProductId?'Shopify ID: '+esc(x.shopifyProductId):'Todavía no enviado a Shopify')+'</div>'
+      +'<div class="sn-actions"><button class="pri sec" onclick="snEdit(\''+esc(x.id)+'\')">Editar</button>'
+      +(x.status==='pending'?'<button class="pri" onclick="snApprove(\''+esc(x.id)+'\')">Aprobar</button>':'')
+      +(x.status!=='discarded'?'<button class="pri sec" onclick="snDiscard(\''+esc(x.id)+'\')">Descartar</button>':'')
+      +'<button class="bad" onclick="snDelete(\''+esc(x.id)+'\')">Eliminar</button></div></article>';
+  }).join('');
+  return '<div class="sn-wrap"><div class="sn-hero"><div style="font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase">Little Nani · Centro de productos</div><h2 style="margin:6px 0">Redes y Shopify</h2><div class="sn-muted">Importa contenido, revisa los datos y aprueba cada producto antes de enviarlo a tu tienda.</div></div>'
+    +'<div class="sn-stats"><div class="sn-stat"><span class="sn-note">Total</span><b>'+c.all+'</b></div><div class="sn-stat"><span class="sn-note">Pendientes</span><b>'+c.pending+'</b></div><div class="sn-stat"><span class="sn-note">Aprobados</span><b>'+c.approved+'</b></div></div>'
+    +'<div class="sn-panel"><h2>Importación y conexiones</h2><div class="sn-note">La conexión real con Meta y Shopify todavía no está activada. Por ahora puedes crear fichas manuales o usar un ejemplo para probar el flujo.</div><div class="sn-actions" style="margin-top:12px"><button class="pri" onclick="snNew()">＋ Nueva ficha</button><button class="pri sec" onclick="snSeed()">Agregar ejemplo</button></div><div class="sn-note" style="margin-top:10px">Instagram: sin conectar · Facebook: sin conectar · Shopify: sin conectar</div></div>'
+    +formHtml+'<div class="sn-panel"><div class="sn-card-head"><h2 style="margin:0">Fichas de productos</h2><select style="max-width:150px" onchange="SN_FILTER=this.value;render()"><option value="all"'+(SN_FILTER==='all'?' selected':'')+'>Todas</option><option value="pending"'+(SN_FILTER==='pending'?' selected':'')+'>Pendientes</option><option value="approved"'+(SN_FILTER==='approved'?' selected':'')+'>Aprobados</option><option value="discarded"'+(SN_FILTER==='discarded'?' selected':'')+'>Descartados</option></select></div><div class="sn-grid" style="margin-top:12px">'+(cards||'<div class="sn-empty" style="grid-column:1/-1">Todavía no hay fichas. Crea una nueva o agrega el ejemplo para probar el módulo.</div>')+'</div></div>'
+    +'<div class="sn-note">Versión inicial de prueba: las fichas se guardan en una colección separada de Firebase. Aprobar una ficha solo cambia su estado interno; no crea ni publica productos en Shopify.</div></div>';
+}
+/* ===== FIN REDES Y SHOPIFY ===== */
+
+var TT={v:'Ventas',f:'Facturas',g:'Gastos',r:'Resumen',q:'Reportes',ah:'Ahorros',cr:'Apartados',im:'Impuestos',sn:'Redes y Shopify'};
 
 function form(t,ei){
   var cat=t==='g'?'<label class="fld-lbl">Categoría</label><select id="c">'+CATS.filter(function(c){return c!=='Fondo Casa'&&c!=='Fondo Impuestos'}).map(function(c){return '<option'+(ei&&ei.c===c?' selected':'')+'>'+c+'</option>'}).join('')+'</select>':'';
@@ -3849,7 +3942,7 @@ function render(){
   var tot=list.reduce(function(x,i){return x+i.a},0);
   var h='<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Gestión financiera</span></div><button class="lo" onclick="out()">Salir</button></div><div class="tabs">';
   
-  ['r','v','f','g','ah','cr','im','q'].forEach(function(k){
+  ['r','v','f','g','ah','cr','im','q','sn'].forEach(function(k){
     var active = (tab === k) || (tab === 'casa' && k === 'g') || (tab === 'ct' && k === 'v') || (tab === 'cx' && k === 'f');
     h+='<button class="'+(active?'on':'')+'" onclick="go(\''+k+'\')">'+TT[k]+'</button>';
   });
@@ -3863,6 +3956,7 @@ function render(){
   else if(tab==='ct') h+=cotizacionesSection();
   else if(tab==='cx') h+=cxpSection();
   else if(tab==='im') h+=impuestosSection();
+  else if(tab==='sn') h+=socialSection();
   else if(tab==='v') {
     h+=detallesVentasSection();
     setTimeout(renderArticulosTempList, 10);
