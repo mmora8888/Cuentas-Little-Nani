@@ -84,8 +84,9 @@ h2{font-size:15px;margin:20px 0 9px;color:var(--tx);font-weight:700;display:flex
 
 /* Formularios adaptables a móvil */
 .fld-lbl{display:block;font-size:11.5px;color:var(--mu);font-weight:600;margin:0 0 4px}
-input,select{width:100%;max-width:100%;padding:10px 11px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit;font-size:14.5px;margin-bottom:9px;transition:border-color .15s}
-input:focus,select:focus{outline:none;border-color:var(--ac)}
+input,select,textarea{width:100%;max-width:100%;padding:10px 11px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit;font-size:14.5px;margin-bottom:9px;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--ac)}
+textarea{resize:vertical;min-height:70px;font-family:inherit;line-height:1.4}
 
 .row-fm{display:grid;grid-template-columns:1fr;gap:9px}
 @media(min-width:480px){.row-fm{grid-template-columns:1fr 1.2fr}}
@@ -161,6 +162,7 @@ tfoot td{font-weight:700;border-bottom:0}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#2f6f5e">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 <script>if("serviceWorker" in navigator)window.addEventListener("load",function(){navigator.serviceWorker.register("./sw.js").catch(function(){})})</script></head>
 <body><div id="app"></div><div id="st" class="mu" style="text-align:center;padding:8px"></div>
 <script>
@@ -311,7 +313,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return
 function sum(a,incluirFondoCasa){var r={v:0,f:0,g:0};a.forEach(function(i){if(!incluirFondoCasa&&esFondo(i))return;r[i.t]+=i.a});r.b=r.v-r.f-r.g;return r}
 function cls(n){return n<0?'neg':'pos'}
 
-var C='',P='';
+var C='',P='',FUNCS=null;
 function gateView(){
   var sv='',se='';try{sv=localStorage.getItem('cn_code')||'';se=localStorage.getItem('cn_email')||''}catch(e){}
   var ky='onkeydown="if(event.key===\'Enter\')ent()"';
@@ -397,6 +399,12 @@ function conn(c){
     fr();
   },function(){}));
 
+  IG.list=[];
+  UN.push(FS.collection(P+'igpend').onSnapshot(function(q){
+    IG.list=q.docs.map(function(x){return x.data()}).filter(function(p){return p&&/^[\w-]+$/.test(p.id||'')});
+    fr();
+  },function(){}));
+
   UN.push(FS.doc(P+'config/main').onSnapshot(function(d){
     var data=d.exists?d.data():{};
     S.saldo=(data&&+data.saldo)||0;
@@ -421,7 +429,7 @@ function init(){
   if(!k){k=(prompt('Pega la clave API de Firebase (se pide una sola vez en este dispositivo):')||'').trim();if(k){try{localStorage.setItem('cn_key',k)}catch(e){}}}
   if(!k){$('app').innerHTML='<p class="mu">Falta la clave API de Firebase. Recarga la página y pégala cuando se te pida.</p>';return}
   firebaseConfig.apiKey=k;
-  firebase.initializeApp(firebaseConfig);FS=firebase.firestore();try{FS.enablePersistence({synchronizeTabs:true}).catch(function(){})}catch(e){}DB=FS;AUTH=firebase.auth();
+  firebase.initializeApp(firebaseConfig);FS=firebase.firestore();try{FS.enablePersistence({synchronizeTabs:true}).catch(function(){})}catch(e){}DB=FS;AUTH=firebase.auth();try{FUNCS=firebase.functions()}catch(e){FUNCS=null}
   $('app').innerHTML='<p class="mu">Cargando…</p>';
   AUTH.onAuthStateChanged(function(u){
     U=u;authOk=true;
@@ -3820,7 +3828,7 @@ function impuestosSection(){
 }
 /* ===== fin IMPUESTOS ===== */
 
-var TT={v:'Ventas',f:'Facturas',g:'Gastos',r:'Resumen',q:'Reportes',ah:'Ahorros',cr:'Apartados',im:'Impuestos'};
+var TT={v:'Ventas',f:'Facturas',g:'Gastos',r:'Resumen',q:'Reportes',ah:'Ahorros',cr:'Apartados',im:'Impuestos',ig:'Productos IG'};
 
 function form(t,ei){
   var cat=t==='g'?'<label class="fld-lbl">Categoría</label><select id="c">'+CATS.filter(function(c){return c!=='Fondo Casa'&&c!=='Fondo Impuestos'}).map(function(c){return '<option'+(ei&&ei.c===c?' selected':'')+'>'+c+'</option>'}).join('')+'</select>':'';
@@ -3831,6 +3839,93 @@ function form(t,ei){
     +'<label class="fld-lbl">'+(t==='f'?'Proveedor':'Detalle o concepto')+'</label><input id="n"'+(t==='f'?' list="prov-dl" autocomplete="off" oninput="provSel()" onchange="provSel()"':'')+' placeholder="'+(t==='f'?'Escribe o elige un proveedor':'Descripción...')+'" value="'+(ei?esc(ei.n):'')+'">'+(t==='f'?provDL():'')
     +cat+el+'<button class="pri" onclick="add(\''+t+'\')">'+lblBtn+'</button>'
     +(ei?'<button type="button" class="pri sec" style="margin-top:8px" onclick="ed=null;render()">Cancelar</button>':'')+'</div>';
+}
+
+/* ===== Productos desde Instagram → Shopify (con aprobación) ===== */
+var IG={list:[],f:'pendiente',pub:'DRAFT',busy:false,busyId:''};
+var IG_MIN=1000,IG_MAX=300000;
+function igFaltas(p){var f=[];if(!String(p.titulo||'').trim())f.push('título');if(!(+p.precio>0))f.push('precio');if(!(p.imgs&&p.imgs.length))f.push('foto');return f}
+function igUrl(u){return /^https:\/\//i.test(u||'')?u:''}
+function igSection(){
+  var L=IG.list.slice().sort(function(a,b){return (b.fecha||'')>(a.fecha||'')?1:-1});
+  var cnt={pendiente:0,aprobado:0,rechazado:0};
+  L.forEach(function(p){var e=p.estado||'pendiente';cnt[e]=(cnt[e]||0)+1});
+  var h='<div class="dash-hero verde"><div class="eyebrow">Instagram → Shopify</div><div class="amount">'+cnt.pendiente+' por aprobar</div><div class="sub">'+cnt.aprobado+' en Shopify · '+cnt.rechazado+' rechazadas</div></div>';
+  if(!RO){
+    h+='<div class="btn-bar"><button type="button" class="pri" onclick="igSync()">'+(IG.busy?'Buscando publicaciones…':'📥 Traer publicaciones nuevas')+'</button></div>';
+    h+='<div class="dash-panel"><label class="fld-lbl">Al aprobar, crear el producto en Shopify como</label><select id="ig_pub" onchange="IG.pub=this.value"><option value="DRAFT"'+(IG.pub==='DRAFT'?' selected':'')+'>Borrador (no visible para clientes)</option><option value="ACTIVE"'+(IG.pub==='ACTIVE'?' selected':'')+'>Activo (visible en la tienda)</option></select><div class="mu">Sin precio o sin foto no se puede aprobar.</div></div>';
+  }
+  h+='<div class="btn-bar">';
+  [['pendiente','Pendientes'],['aprobado','Aprobadas'],['rechazado','Rechazadas']].forEach(function(x){
+    h+='<button type="button" class="pri'+(IG.f===x[0]?'':' sec')+'" onclick="IG.f=\''+x[0]+'\';render()">'+x[1]+' ('+(cnt[x[0]]||0)+')</button>';
+  });
+  h+='</div>';
+  var vis=L.filter(function(p){return (p.estado||'pendiente')===IG.f});
+  if(!vis.length){
+    h+='<div class="dash-panel"><p class="mu" style="margin:4px 0">'+(IG.f==='pendiente'?'No hay publicaciones por aprobar. Toca "Traer publicaciones nuevas".':'Nada por aquí todavía.')+'</p></div>';
+  }
+  vis.forEach(function(p){h+=igCard(p)});
+  return h;
+}
+function igCard(p){
+  var id=p.id,est=p.estado||'pendiente',falt=igFaltas(p),h='<div class="dash-panel">';
+  var imgs=(p.imgs||[]).map(igUrl).filter(Boolean).slice(0,8);
+  if(imgs.length){
+    h+='<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px">';
+    imgs.forEach(function(u){h+='<img src="'+esc(u)+'" alt="Foto de la publicación" loading="lazy" style="height:130px;width:auto;border-radius:10px;border:1px solid var(--bd);flex:none">'});
+    h+='</div>';
+  }
+  var lk=igUrl(p.link);
+  h+='<div class="mu" style="margin-bottom:8px">'+shDot((p.fecha||'').slice(0,10))+(lk?' · <a href="'+esc(lk)+'" target="_blank" rel="noopener" style="color:var(--ac)">Ver en Instagram</a>':'')
+    +'<span class="bd '+(est==='aprobado'?'ok':est==='rechazado'?'bad':'')+'">'+(est==='aprobado'?'En Shopify':est==='rechazado'?'Rechazada':'Pendiente')+'</span></div>';
+  if(p.aviso)h+='<div class="dash-alert">'+esc(p.aviso)+'</div>';
+  if(est==='pendiente'&&!RO){
+    var busy=IG.busyId===id,bad='border-color:var(--bad)';
+    if(falt.length)h+='<div class="dash-alert bad">Falta: '+falt.join(', ')+'</div>';
+    h+='<label class="fld-lbl">Título</label><input id="ig_t_'+id+'" value="'+esc(p.titulo)+'" placeholder="Nombre del producto"'+(!String(p.titulo||'').trim()?' style="'+bad+'"':'')+'>'
+      +'<div class="row"><div><label class="fld-lbl">Precio (₡)</label><input id="ig_p_'+id+'" type="number" inputmode="decimal" min="0" step="1" value="'+(+p.precio>0?p.precio:'')+'" placeholder="Falta precio"'+(!(+p.precio>0)?' style="'+bad+'"':'')+'></div>'
+      +'<div><label class="fld-lbl">Talla (opcional)</label><input id="ig_s_'+id+'" value="'+esc(p.talla)+'" placeholder="Ej: M, 4-6 años"></div></div>'
+      +'<label class="fld-lbl">Descripción</label><textarea id="ig_d_'+id+'" rows="3">'+esc(p.desc)+'</textarea>'
+      +'<details style="margin-bottom:10px"><summary class="mu" style="cursor:pointer">Texto original de la publicación</summary><div class="mu" style="white-space:pre-wrap;margin-top:6px">'+esc(p.caption)+'</div></details>'
+      +'<div class="btn-bar"><button type="button" class="pri ok" onclick="igAprobar(\''+id+'\')"'+(busy?' disabled':'')+'>'+(busy?'Creando en Shopify…':'✓ Aprobar')+'</button><button type="button" class="pri bad" onclick="igRechazar(\''+id+'\')"'+(busy?' disabled':'')+'>Rechazar</button></div>';
+  }else{
+    h+='<b>'+esc(p.titulo||'(sin título)')+'</b>'+(+p.precio>0?' · ₡'+money(p.precio):'');
+    if(est==='rechazado'&&!RO)h+='<div class="btn-bar" style="margin-top:8px"><button type="button" class="pri sec" onclick="igReabrir(\''+id+'\')">Volver a pendientes</button></div>';
+  }
+  return h+'</div>';
+}
+function igSync(){
+  if(IG.busy)return;
+  if(typeof FUNCS==='undefined'||!FUNCS){$('st').textContent='Error: falta el módulo de funciones de Firebase';return}
+  IG.busy=true;render();
+  FUNCS.httpsCallable('igSync',{timeout:120000})({code:C}).then(function(r){
+    IG.busy=false;var n=(r.data&&r.data.nuevos)||0;
+    $('st').textContent=n?('Listo: '+n+' publicación(es) nueva(s) por revisar'):'Listo: no hay publicaciones nuevas';render();
+  }).catch(function(e){IG.busy=false;$('st').textContent='Error al traer publicaciones: '+(e&&e.message||e);render()});
+}
+function igAprobar(id){
+  if(RO||IG.busyId)return;
+  var p=IG.list.filter(function(x){return x.id===id})[0];if(!p)return;
+  var v=function(k){var el=$('ig_'+k+'_'+id);return el?el.value.trim():''};
+  var n={titulo:v('t'),precio:parseFloat(String(v('p')).replace(',','.'))||0,talla:v('s'),desc:v('d')};
+  var f=igFaltas({titulo:n.titulo,precio:n.precio,imgs:p.imgs});
+  if(f.length){$('st').textContent='Falta: '+f.join(', ')+' (no se puede aprobar así)';return}
+  if((n.precio<IG_MIN||n.precio>IG_MAX)&&!confirm('El precio ₡'+money(n.precio)+' se ve fuera de lo normal. ¿Aprobar de todos modos?'))return;
+  if(typeof FUNCS==='undefined'||!FUNCS){$('st').textContent='Error: falta el módulo de funciones de Firebase';return}
+  IG.busyId=id;render();
+  FS.doc(P+'igpend/'+id).set(n,{merge:true}).then(function(){
+    return FUNCS.httpsCallable('igAprobar',{timeout:120000})({code:C,id:id,status:IG.pub});
+  }).then(function(r){
+    IG.busyId='';$('st').textContent=(r.data&&r.data.aviso)?('Creado, pero: '+r.data.aviso):'Producto creado en Shopify';render();
+  }).catch(function(e){IG.busyId='';$('st').textContent='Error al crear en Shopify: '+(e&&e.message||e);render()});
+}
+function igRechazar(id){
+  if(RO)return;
+  FS.doc(P+'igpend/'+id).set({estado:'rechazado'},{merge:true}).catch(function(e){$('st').textContent='Error: '+e.message});
+}
+function igReabrir(id){
+  if(RO)return;
+  FS.doc(P+'igpend/'+id).set({estado:'pendiente'},{merge:true}).catch(function(e){$('st').textContent='Error: '+e.message});
 }
 
 function render(){
@@ -3849,7 +3944,7 @@ function render(){
   var tot=list.reduce(function(x,i){return x+i.a},0);
   var h='<div class="hd"><img src="'+LOGO+'" alt="Logo de Little Nani"><div><h1>Little Nani</h1><span class="mu">Gestión financiera</span></div><button class="lo" onclick="out()">Salir</button></div><div class="tabs">';
   
-  ['r','v','f','g','ah','cr','im','q'].forEach(function(k){
+  ['r','v','f','g','ah','cr','im','q','ig'].forEach(function(k){
     var active = (tab === k) || (tab === 'casa' && k === 'g') || (tab === 'ct' && k === 'v') || (tab === 'cx' && k === 'f');
     h+='<button class="'+(active?'on':'')+'" onclick="go(\''+k+'\')">'+TT[k]+'</button>';
   });
@@ -3863,6 +3958,7 @@ function render(){
   else if(tab==='ct') h+=cotizacionesSection();
   else if(tab==='cx') h+=cxpSection();
   else if(tab==='im') h+=impuestosSection();
+  else if(tab==='ig') h+=igSection();
   else if(tab==='v') {
     h+=detallesVentasSection();
     setTimeout(renderArticulosTempList, 10);
