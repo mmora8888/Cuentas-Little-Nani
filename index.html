@@ -3885,6 +3885,7 @@ function igCard(p){
   h+='<div class="mu" style="margin-bottom:8px">'+shDot((p.fecha||'').slice(0,10))+(lk?' · <a href="'+esc(lk)+'" target="_blank" rel="noopener" style="color:var(--ac)">Ver en Instagram</a>':'')
     +'<span class="bd '+(est==='aprobado'?'ok':est==='rechazado'?'bad':'')+'">'+(est==='aprobado'?'En Shopify':est==='rechazado'?'Rechazada':'Pendiente')+'</span></div>';
   if(p.aviso)h+='<div class="dash-alert">'+esc(p.aviso)+'</div>';
+  if(p.diag)h+='<div class="mu" style="margin-bottom:8px">'+esc(p.diag)+'</div>';
   if(est==='pendiente'&&!RO){
     var busy=IG.busyId===id,bad='border-color:var(--bad)';
     if(falt.length)h+='<div class="dash-alert bad">Falta: '+falt.join(', ')+'</div>';
