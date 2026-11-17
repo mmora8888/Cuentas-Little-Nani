@@ -1494,19 +1494,19 @@ function imprimirSeguro(html,titulo,pageCss,extraCss){
 
 /* Vista previa dentro de la app para celulares/tablets (iPhone no abre bien ventanas nuevas):
    muestra el recibo en pantalla completa y el botón Imprimir llama a window.print() directo desde el toque. */
-var PV={html:'',pageCss:''};
+var PV={html:'',pageCss:'',file:null};
 function pvAbrir(html,pageCss,extraCss){
   pvCerrar();
-  PV.html=html;PV.pageCss=pageCss||'@page{margin:10mm}';
+  PV.html=html;PV.pageCss=pageCss||'@page{margin:10mm}';PV.file=null;
   var st=document.createElement('style');st.id='pv_extra';
   st.textContent='#pv_overlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:#e9e9e9;overflow:auto;-webkit-overflow-scrolling:touch}'
     +'#pv_overlay .pvbar{position:sticky;top:0;display:flex;gap:8px;padding:10px;padding-top:calc(10px + env(safe-area-inset-top,0px));background:#173b59;z-index:2}'
-    +'#pv_overlay .pvbar button{flex:1;width:auto;margin:0;padding:12px;border:0;border-radius:10px;font-size:15px;font-weight:700;background:#fff;color:#173b59}'
+    +'#pv_overlay .pvbar button{flex:1;width:auto;margin:0;padding:12px 6px;border:0;border-radius:10px;font-size:15px;font-weight:700;background:#fff;color:#173b59}'
     +'#pv_overlay .pvpg{background:#fff;color:#000;margin:10px auto;max-width:7in;overflow-x:auto}'
     +(extraCss||'');
   document.head.appendChild(st);
   var ov=document.createElement('div');ov.id='pv_overlay';
-  ov.innerHTML='<div class="pvbar"><button type="button" onclick="pvImprimir()">🖨️ Imprimir / Guardar PDF</button><button type="button" onclick="pvCerrar()">Cerrar</button></div><div class="pvpg pg">'+html+'</div>';
+  ov.innerHTML='<div class="pvbar"><button type="button" onclick="pvImprimir()">🖨️ Imprimir</button><button type="button" id="pv_pdfbtn" onclick="pvPDF()">📄 PDF / Compartir</button><button type="button" onclick="pvCerrar()">Cerrar</button></div><div class="pvpg pg">'+html+'</div>';
   document.body.appendChild(ov);
 }
 function pvCerrar(){
@@ -1521,6 +1521,70 @@ function pvImprimir(){
   var stp=document.createElement('style');stp.id='lb_page_style';stp.textContent=PV.pageCss;document.head.appendChild(stp);
   window.addEventListener('afterprint',function f(){window.removeEventListener('afterprint',f);var y=$('lb_page_style');if(y)y.remove()});
   window.print();
+}
+
+/* iPhone: window.print() no responde en Chrome iOS, apps instaladas en pantalla de inicio ni navegadores dentro de otras apps.
+   Alternativa: crear un PDF en el teléfono y compartirlo/guardarlo (desde ahí se puede imprimir con AirPrint). */
+function pvLib(src,test,cb){
+  if(test()){cb(true);return}
+  var s=document.createElement('script');s.src=src;
+  s.onload=function(){cb(test())};s.onerror=function(){cb(false)};
+  document.head.appendChild(s);
+}
+function pvEntregar(){
+  var f=PV.file;if(!f)return;
+  if(navigator.canShare&&navigator.canShare({files:[f]})){
+    navigator.share({files:[f],title:f.name}).catch(function(){});
+    return;
+  }
+  var url=URL.createObjectURL(f),a=document.createElement('a');
+  a.href=url;a.download=f.name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(url)},60000);
+}
+function pvPDF(){
+  var b=$('pv_pdfbtn');
+  if(PV.file){pvEntregar();return}
+  var el=document.querySelector('#pv_overlay .pvpg');if(!el)return;
+  var txt='📄 PDF / Compartir';
+  if(b){b.disabled=true;b.textContent='Preparando…'}
+  var fin=function(m){if(b){b.disabled=false;b.textContent=txt}if(m)alert(m)};
+  pvLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',function(){return !!window.jspdf},function(ok1){
+    if(!ok1)return fin('No se pudo cargar el generador de PDF (revisa tu conexión).');
+    pvLib('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',function(){return !!window.html2canvas},function(ok2){
+      if(!ok2)return fin('No se pudo cargar el generador de PDF (revisa tu conexión).');
+      var J=window.jspdf.jsPDF,etiq=/size:\s*6in\s+4in/.test(PV.pageCss);
+      var tasks=etiq?Array.prototype.slice.call(el.querySelectorAll('.lb-page')):[el];
+      var pdf=null,i=0;
+      (function next(){
+        if(i>=tasks.length){
+          try{
+            PV.file=new File([pdf.output('blob')],'little-nani-'+today()+'.pdf',{type:'application/pdf'});
+            if(b){b.disabled=false;b.textContent='📤 Compartir / Guardar PDF'}
+          }catch(e){fin('Error al crear el PDF: '+e.message)}
+          return;
+        }
+        html2canvas(tasks[i],{scale:2,backgroundColor:'#ffffff',useCORS:true}).then(function(cv){
+          if(etiq){
+            if(!pdf)pdf=new J({orientation:'landscape',unit:'in',format:[4,6]});else pdf.addPage([4,6],'landscape');
+            pdf.addImage(cv.toDataURL('image/jpeg',0.95),'JPEG',0,0,6,4);
+          }else{
+            pdf=new J({unit:'pt',format:'letter'});
+            var W=576,H=756,ratio=W/cv.width,ph=Math.floor(H/ratio),y=0,first=true;
+            while(y<cv.height){
+              var h=Math.min(ph,cv.height-y),c2=document.createElement('canvas');
+              c2.width=cv.width;c2.height=h;
+              var cx=c2.getContext('2d');cx.fillStyle='#fff';cx.fillRect(0,0,c2.width,h);
+              cx.drawImage(cv,0,y,cv.width,h,0,0,cv.width,h);
+              if(!first)pdf.addPage();first=false;
+              pdf.addImage(c2.toDataURL('image/jpeg',0.95),'JPEG',18,18,W,h*ratio);
+              y+=h;
+            }
+          }
+          i++;next();
+        }).catch(function(e){fin('Error al crear el PDF: '+e.message)});
+      })();
+    });
+  });
 }
 function imprimirReciboApartado(id){
   var c=S.creditos.filter(function(x){return x.id===id})[0];if(!c)return;
