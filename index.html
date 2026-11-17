@@ -21,6 +21,8 @@ h2{font-size:15px;margin:20px 0 9px;color:var(--tx);font-weight:700;display:flex
 
 .tabs{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .tabs::-webkit-scrollbar{display:none}
+/* En pantallas anchas las pestañas pasan a una segunda fila en vez de quedar escondidas; en el teléfono se desliza con el dedo */
+@media(min-width:700px){.tabs{flex-wrap:wrap;overflow-x:visible}}
 .tabs button{flex:0 0 auto;padding:9px 12px;border:1px solid var(--bd);background:var(--card);color:var(--mu);border-radius:99px;font:inherit;font-size:12.5px;font-weight:600;white-space:nowrap;min-width:82px;cursor:pointer;transition:all .15s ease}
 .tabs button.on{background:var(--ac);color:var(--on);border-color:var(--ac);box-shadow:0 3px 10px rgba(47,111,94,.22)}
 
@@ -818,7 +820,7 @@ function sf(){
   $('res').innerHTML=sres();
 }
 function sx(){Q={q:'',t:'',c:'',a:'',b:'',f:'',h:'',currentMonth:false};render()}
-function PV(){
+function provLista(){
   var m={},l=[];S.items.filter(function(i){return i.t==='f'}).forEach(function(i){var n=(i.n||'').trim(),k=n.toLowerCase();if(k&&!m[k]){m[k]=1;l.push([k,n])}});
   l.sort(function(a,b){return a[0]<b[0]?-1:1});return [['','Todos los proveedores']].concat(l);
 }
@@ -876,7 +878,7 @@ function search(){
   var mActual=rcDatos(rcMes());
   var h='<div class="dash-hero"><div class="eyebrow">Auditoría y contabilidad</div><div class="amount">'+money(mActual.bal)+'</div><div style="font-weight:650">Balance de '+rcMesTxt(rcMes())+'</div><div class="sub">Ventas: ₡'+money(mActual.tv)+' · Facturas: ₡'+money(mActual.tf)+' · Gastos: ₡'+money(mActual.tg)+'</div></div>';
   h+=reporteContadorCard();
-  h+='<h2>Buscador y filtros avanzados</h2><div class="dash-panel"><label class="fld-lbl">Proveedor</label><select id="q_q"'+ev+'>'+opt(PV(),Q.q)+'</select><label class="fld-lbl">Cédula jurídica</label><select id="q_j"'+ev+'>'+opt(CJ(),Q.j||'')+'</select>'
+  h+='<h2>Buscador y filtros avanzados</h2><div class="dash-panel"><label class="fld-lbl">Proveedor</label><select id="q_q"'+ev+'>'+opt(provLista(),Q.q)+'</select><label class="fld-lbl">Cédula jurídica</label><select id="q_j"'+ev+'>'+opt(CJ(),Q.j||'')+'</select>'
    +'<div class="row"><div><label class="fld-lbl">Tipo de movimiento</label><select id="q_t"'+ev+'>'+opt(T,Q.t)+'</select></div><div><label class="fld-lbl">Categoría de gasto</label><select id="q_c"'+ev+'>'+opt(C,Q.c)+'</select></div>'
    +'<div><label class="fld-lbl">Monto mínimo</label><input id="q_a" type="number" inputmode="decimal" value="'+esc(Q.a)+'"'+ev+'></div><div><label class="fld-lbl">Monto máximo</label><input id="q_b" type="number" inputmode="decimal" value="'+esc(Q.b)+'"'+ev+'></div>'
    +'<div><label class="fld-lbl">Desde</label><input id="q_f" type="date" value="'+Q.f+'"'+ev+'></div><div><label class="fld-lbl">Hasta</label><input id="q_h" type="date" value="'+Q.h+'"'+ev+'></div></div>'
@@ -4029,5 +4031,7 @@ function render(){
     }
   }
 }
+/* La rueda del mouse también desplaza la barra de pestañas cuando no cabe completa */
+document.addEventListener('wheel',function(e){var t=e.target&&e.target.closest?e.target.closest('.tabs'):null;if(!t||t.scrollWidth<=t.clientWidth)return;var d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;t.scrollLeft+=d;e.preventDefault()},{passive:false});
 window.onload=init;
 </script></body></html>
