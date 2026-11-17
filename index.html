@@ -3911,9 +3911,9 @@ function igSync(){
   if(IG.desde)pl.desde=IG.desde;
   if(IG.hasta)pl.hasta=IG.hasta;
   IG.busy=true;render();
-  FUNCS.httpsCallable('igSync',{timeout:120000})(pl).then(function(r){
+  FUNCS.httpsCallable('igSync',{timeout:300000})(pl).then(function(r){
     IG.busy=false;var n=(r.data&&r.data.nuevos)||0;
-    $('st').textContent=n?('Listo: '+n+' publicación(es) '+(rango?'en el rango':'nueva(s)')+' por revisar'):(rango?'Listo: no hay publicaciones nuevas en ese rango':'Listo: no hay publicaciones nuevas');render();
+    $('st').textContent=n?('Listo: '+n+' publicación(es) '+(rango?'en el rango':'nueva(s)')+' por revisar'):(rango?('Listo: no hay publicaciones nuevas en ese rango'+((r.data&&r.data.existentes)?' ('+r.data.existentes+' ya estaban cargadas)':'')):'Listo: no hay publicaciones nuevas');render();
   }).catch(function(e){IG.busy=false;$('st').textContent='Error al traer publicaciones: '+(e&&e.message||e);render()});
 }
 function igAprobar(id){
