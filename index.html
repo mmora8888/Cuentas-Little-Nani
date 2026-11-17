@@ -3844,7 +3844,8 @@ function form(t,ei){
 }
 
 /* ===== Productos desde Instagram → Shopify (con aprobación) ===== */
-var IG={list:[],f:'pendiente',pub:'DRAFT',busy:false,busyId:'',desde:'',hasta:''};
+var IG={list:[],f:'pendiente',pub:'DRAFT',busy:false,busyId:'',limpiando:false,desde:'',hasta:''};
+var IG_LOTE=50;
 var IG_MIN=1000,IG_MAX=300000;
 function igFaltas(p){var f=[];if(!String(p.titulo||'').trim())f.push('título');if(!(+p.precio>0))f.push('precio');if(!(p.imgs&&p.imgs.length))f.push('foto');return f}
 function igUrl(u){return /^https:\/\//i.test(u||'')?u:''}
@@ -3856,9 +3857,9 @@ function igSection(){
   if(!RO){
     var rg=!!(IG.desde||IG.hasta);
     h+='<div class="dash-panel"><label class="fld-lbl">Traer publicaciones por rango de fechas (opcional)</label><div class="row"><div><label class="fld-lbl">Desde</label><input id="ig_desde" type="date" value="'+esc(IG.desde)+'" max="'+today()+'" onchange="IG.desde=this.value"></div><div><label class="fld-lbl">Hasta</label><input id="ig_hasta" type="date" value="'+esc(IG.hasta)+'" max="'+today()+'" onchange="IG.hasta=this.value"></div></div>'
-      +'<div class="mu">'+(rg?'Se traerán las publicaciones dentro de ese rango.':'Sin fechas: se traen solo las publicaciones nuevas.')+'</div>'
+      +'<div class="mu">'+(rg?'Se traen de a '+IG_LOTE+' por vez dentro de ese rango; toca de nuevo para las siguientes.':'Sin fechas: se traen las publicaciones más recientes que aún no has cargado, de a '+IG_LOTE+' por vez.')+'</div>'
       +(rg?'<button type="button" class="btn-sm" style="margin-top:8px" onclick="IG.desde=\'\';IG.hasta=\'\';render()">Quitar rango</button>':'')+'</div>';
-    h+='<div class="btn-bar"><button type="button" class="pri" onclick="igSync()">'+(IG.busy?'Buscando publicaciones…':(rg?'📥 Traer publicaciones del rango':'📥 Traer publicaciones nuevas'))+'</button></div>';
+    h+='<div class="btn-bar"><button type="button" class="pri" onclick="igSync()">'+(IG.busy?'Buscando publicaciones…':(rg?'📥 Traer las siguientes '+IG_LOTE+' del rango':'📥 Traer las siguientes '+IG_LOTE))+'</button></div>';
     h+='<div class="dash-panel"><label class="fld-lbl">Al aprobar, crear el producto en Shopify como</label><select id="ig_pub" onchange="IG.pub=this.value"><option value="DRAFT"'+(IG.pub==='DRAFT'?' selected':'')+'>Borrador (no visible para clientes)</option><option value="ACTIVE"'+(IG.pub==='ACTIVE'?' selected':'')+'>Activo (visible en la tienda)</option></select><div class="mu">Sin precio o sin foto no se puede aprobar.</div></div>';
   }
   h+='<div class="btn-bar">';
@@ -3866,6 +3867,9 @@ function igSection(){
     h+='<button type="button" class="pri'+(IG.f===x[0]?'':' sec')+'" onclick="IG.f=\''+x[0]+'\';render()">'+x[1]+' ('+(cnt[x[0]]||0)+')</button>';
   });
   h+='</div>';
+  if(!RO&&(IG.f==='pendiente'||IG.f==='rechazado')&&cnt[IG.f]>0){
+    h+='<div class="btn-bar"><button type="button" class="pri bad" onclick="igLimpiar()"'+(IG.limpiando?' disabled':'')+'>'+(IG.limpiando?'Limpiando…':'🗑 Limpiar '+(IG.f==='pendiente'?'pendientes':'rechazadas')+' ('+cnt[IG.f]+')')+'</button></div>';
+  }
   var vis=L.filter(function(p){return (p.estado||'pendiente')===IG.f});
   if(!vis.length){
     h+='<div class="dash-panel"><p class="mu" style="margin:4px 0">'+(IG.f==='pendiente'?'No hay publicaciones por aprobar. Toca "Traer publicaciones nuevas".':'Nada por aquí todavía.')+'</p></div>';
@@ -3912,9 +3916,13 @@ function igSync(){
   if(IG.desde)pl.desde=IG.desde;
   if(IG.hasta)pl.hasta=IG.hasta;
   IG.busy=true;render();
+  pl.lote=IG_LOTE;
   FUNCS.httpsCallable('igSync',{timeout:300000})(pl).then(function(r){
-    IG.busy=false;var n=(r.data&&r.data.nuevos)||0;
-    $('st').textContent=n?('Listo: '+n+' publicación(es) '+(rango?'en el rango':'nueva(s)')+' por revisar'):(rango?('Listo: no hay publicaciones nuevas en ese rango'+((r.data&&r.data.existentes)?' ('+r.data.existentes+' ya estaban cargadas)':'')):'Listo: no hay publicaciones nuevas');render();
+    IG.busy=false;var d=r.data||{},n=d.nuevos||0,mas=!!d.hayMas,msg;
+    if(n)msg='Listo: '+n+' publicación(es) cargada(s) por revisar'+(mas?'. Toca de nuevo para traer las siguientes':'');
+    else if(mas)msg='Se revisó un tramo sin publicaciones nuevas. Toca de nuevo para seguir buscando';
+    else msg=rango?('Listo: no hay más publicaciones en ese rango'+(d.existentes?' ('+d.existentes+' ya estaban cargadas)':'')):'Listo: no hay más publicaciones por traer';
+    $('st').textContent=msg;render();
   }).catch(function(e){IG.busy=false;$('st').textContent='Error al traer publicaciones: '+(e&&e.message||e);render()});
 }
 function igAprobar(id){
@@ -3932,6 +3940,19 @@ function igAprobar(id){
   }).then(function(r){
     IG.busyId='';$('st').textContent=(r.data&&r.data.aviso)?('Creado, pero: '+r.data.aviso):'Producto creado en Shopify';render();
   }).catch(function(e){IG.busyId='';$('st').textContent='Error al crear en Shopify: '+(e&&e.message||e);render()});
+}
+function igLimpiar(){
+  if(RO||IG.limpiando||IG.busy||IG.busyId)return;
+  var est=IG.f;if(est!=='pendiente'&&est!=='rechazado')return;
+  var n=IG.list.filter(function(p){return (p.estado||'pendiente')===est}).length;if(!n)return;
+  var nom=est==='pendiente'?'pendientes':'rechazadas';
+  if(!confirm('¿Borrar las '+n+' publicaciones '+nom+' cargadas?\n\nSolo se quitan de esta lista: no se borra nada en Instagram ni en Shopify, y las aprobadas no se tocan. Si las vuelves a traer, aparecerán otra vez como pendientes.'))return;
+  if(typeof FUNCS==='undefined'||!FUNCS){$('st').textContent='Error: falta el módulo de funciones de Firebase';return}
+  IG.limpiando=true;render();
+  FUNCS.httpsCallable('igLimpiar',{timeout:120000})({code:C,estado:est}).then(function(r){
+    IG.limpiando=false;var b=(r.data&&r.data.borrados)||0;
+    $('st').textContent='Listo: '+b+' publicación(es) '+nom+' quitada(s)';render();
+  }).catch(function(e){IG.limpiando=false;$('st').textContent='Error al limpiar: '+(e&&e.message||e);render()});
 }
 function igRechazar(id){
   if(RO)return;
