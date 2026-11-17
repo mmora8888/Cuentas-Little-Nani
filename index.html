@@ -1726,6 +1726,14 @@ function creditosSection(){
 var dvArticulosTemp = [];
 var dvTipo = '';
 function esBodega(i){return !!(i && i.dvMeta && i.dvMeta.tipo === 'bodega')}
+function esVentaEnvio(i){
+  if(!i||i.t!=='v'||!i.dvMeta)return false;
+  var v=i.dvMeta;
+  if(v.tipo==='bodega')return false;
+  if(v.tipo==='envio')return true;
+  /* registros antiguos sin tipo: solo cuentan como envío si tienen guía, dirección o envío cobrado */
+  return !!(String(v.guia||'').trim()||String(v.provincia||'').trim()||String(v.canton||'').trim()||String(v.distrito||'').trim()||String(v.otrosDatos||'').trim()||(parseFloat(v.envio)||0)>0);
+}
 function agregarArticuloTemp(desc, precio){
   dvArticulosTemp.push({desc: desc || '', precio: parseFloat(precio) || 0});
   renderArticulosTempList();
@@ -2400,7 +2408,7 @@ var LB_ConGuia=false,LB_L=[],LB_Sel={},LB_Dias=7;
 function lbRango(r){return LB_Dias>1?shDot(r.desde)+' al '+shDot(r.dia):shDot(r.dia)}
 function ventasEnvioDelDia(){
   var dia=DV_Q||today(),desde=addDays(dia,-(LB_Dias-1));
-  return {dia:dia,desde:desde,l:S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&i.dvMeta.tipo!=='bodega'&&i.d>=desde&&i.d<=dia}).sort(function(a,b){return a.d===b.d?(a.id<b.id?-1:1):(a.d<b.d?-1:1)})};
+  return {dia:dia,desde:desde,l:S.items.filter(function(i){return esVentaEnvio(i)&&i.d>=desde&&i.d<=dia}).sort(function(a,b){return a.d===b.d?(a.id<b.id?-1:1):(a.d<b.d?-1:1)})};
 }
 function sinGuiaDelDia(){
   var r=ventasEnvioDelDia();
@@ -2408,7 +2416,7 @@ function sinGuiaDelDia(){
 }
 function loteBtn(){
   var r=ventasEnvioDelDia(),sg=sinGuiaDelDia().l.length,b;
-  var pc=S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&i.dvMeta.tipo!=='bodega'&&String(i.dvMeta.guia||'').trim()&&!i.dvMeta.guiaEnviada}).length;
+  var pc=S.items.filter(function(i){return esVentaEnvio(i)&&String(i.dvMeta.guia||'').trim()&&!i.dvMeta.guiaEnviada}).length;
   if(!r.l.length)b='<p class="mu" style="margin:6px 0">Sin ventas con datos de envío ('+lbRango(r)+').</p>';
   else b='<button type="button" class="pri" style="margin:6px 0" onclick="lbAbrir()">🖨️ Etiquetas ('+sg+' sin guía) · '+lbRango(r)+'</button>';
   return b+'<label class="chk"><input type="checkbox" '+(DV_Pend?'checked':'')+' onchange="toggleDvPend(this)"> Solo guías por avisar al cliente ('+pc+')</label>';
@@ -2634,7 +2642,7 @@ function detallesVentasSection(){
   var t=today(),w=wk(t),m=t.slice(0,7),vh=0,vs=0,vm=0;
   S.items.forEach(function(i){if(i.t!=='v')return;if(i.d===t)vh+=i.a;if(wk(i.d)===w)vs+=i.a;if(i.d.slice(0,7)===m)vm+=i.a});
   var ctAb=(S.cotizaciones||[]).filter(function(c){return c.estado!=='convertida'}).length;
-  var sinGuia=S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&i.dvMeta.tipo!=='bodega'&&!String(i.dvMeta.guia||'').trim()}).length;
+  var sinGuia=S.items.filter(function(i){return esVentaEnvio(i)&&!String(i.dvMeta.guia||'').trim()}).length;
   var tp = dvTipo || (edObj && edObj.dvMeta ? (edObj.dvMeta.tipo==='bodega'?'bodega':'envio') : '');
   dvTipo = tp;
   var dm = (edObj && edObj.dvMeta) ? edObj.dvMeta : null;
