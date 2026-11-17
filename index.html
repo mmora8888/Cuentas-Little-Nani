@@ -19,8 +19,9 @@ h2{font-size:15px;margin:20px 0 9px;color:var(--tx);font-weight:700;display:flex
 .hd img{width:76px;height:76px;border-radius:50%;flex:none;background:#fff;border:1px solid var(--bd);object-fit:contain;object-position:center;padding:0;box-shadow:none}
 .lo{margin-left:auto;border:1px solid var(--bd);background:var(--card);color:var(--mu);border-radius:10px;padding:6px 11px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
 
-.tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px;overflow:visible;padding-bottom:4px;width:100%}
-.tabs button{flex:1 1 auto;padding:9px 12px;border:1px solid var(--bd);background:var(--card);color:var(--mu);border-radius:99px;font:inherit;font-size:12.5px;font-weight:600;white-space:nowrap;min-width:82px;cursor:pointer;transition:all .15s ease}
+.tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-bottom:14px;overflow:visible;padding-bottom:4px;width:100%}
+.tabs button{width:100%;min-width:0;padding:9px 6px;border:1px solid var(--bd);background:var(--card);color:var(--mu);border-radius:99px;font:inherit;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer;transition:all .15s ease}
+@media(max-width:520px){.tabs{grid-template-columns:repeat(3,minmax(0,1fr))}.tabs button{font-size:12px;padding:9px 4px}}
 .tabs button.on{background:var(--ac);color:var(--on);border-color:var(--ac);box-shadow:0 3px 10px rgba(47,111,94,.22)}
 
 /* Selector de semana */
@@ -3941,12 +3942,12 @@ function render(){
   
   ['r','v','f','g','ah','cr','im','q','sn'].forEach(function(k){
     var active = (tab === k) || (tab === 'casa' && k === 'g') || (tab === 'ct' && k === 'v') || (tab === 'cx' && k === 'f');
-    h+='<button class="'+(active?'on':'')+'" onclick="go(\''+k+'\')">'+TT[k]+'</button>';
+    h+='<button type="button" class="'+(active?'on':'')+'" aria-label="Abrir '+TT[k]+'" onclick="go(\''+k+'\');return false;">'+TT[k]+'</button>';
   });
   h+='</div>';
   
   if(tab==='r') h+=summary(wi);
-  else if(tab==='q') h+=search();
+  else if(tab==='q'){try{h+=search()}catch(reportErr){console.error('Error al abrir Reportes:',reportErr);h+='<div class="dash-panel"><h2>No se pudo cargar Reportes</h2><p class="mu">Ocurrió un error al preparar los datos del reporte. Recarga la página; si continúa, comparte el mensaje de error de la consola del navegador.</p></div>';}}
   else if(tab==='ah') h+=ahorrosSection();
   else if(tab==='cr') h+=creditosSection();
   else if(tab==='casa') h+=gastosCasaSection();
