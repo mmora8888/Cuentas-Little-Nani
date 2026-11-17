@@ -912,13 +912,7 @@ function expReporteProveedoresCSV(){
 function imprimirReporteProveedores(){
   var el = $('reporte_proveedores_card');
   if(!el) return;
-  var w = window.open('', '_blank');
-  w.document.write('<html><head><title>Reporte de Facturas por Proveedor · Little Nani</title><style>body{font-family:sans-serif;padding:20px;color:#000;background:#fff}.dash-panel,.card{border:1px solid #ccc;border-radius:8px;padding:16px;margin-bottom:16px}.dash-grid,.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}button{display:none!important}b{font-weight:700}.mu{color:#666;font-size:12px}</style></head><body>');
-  w.document.write(el.innerHTML);
-  w.document.write('</body></html>');
-  w.document.close();
-  w.focus();
-  setTimeout(function(){ w.print(); w.close(); }, 250);
+  imprimirSeguro('<div style="padding:20px;color:#000;font-family:sans-serif">'+el.innerHTML+'</div>','Reporte de Facturas por Proveedor · Little Nani','@page{margin:10mm}','.dash-panel,.card{border:1px solid #ccc;border-radius:8px;padding:16px;margin-bottom:16px}.dash-grid,.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pg button{display:none!important}.pg b{font-weight:700}.pg .mu{color:#666;font-size:12px}');
 }
 
 function sres(){
@@ -1474,11 +1468,31 @@ function reciboHTML(c){
     +'<div style="text-align:right;font-size:15px"><div>Monto total: <b>₡'+money(c.monto)+'</b></div><div>Total abonado: <b>₡'+money(c.pagado)+'</b></div><div style="font-size:18px;margin-top:4px">Saldo pendiente: <b>₡'+money(pend)+'</b></div></div>'
     +'<div style="margin-top:18px;font-size:12px;color:#444">Emitido el '+shDot(today())+'. ¡Gracias por su compra!</div></div>';
 }
+
+/* Impresión compatible con móviles: abre el recibo en una ventana propia con botón de imprimir/guardar PDF.
+   Si el navegador bloquea la ventana, usa el método anterior pero esperando a que cargue la imagen. */
+var LABEL_CSS=".lb-page{width:6in;height:4in;padding:.1in;overflow:hidden;break-inside:avoid;page-break-inside:avoid;background:#fff}.label-box{width:100%;height:100%;border:2px solid #000;padding:12px 20px;border-radius:6px;background:#fff;color:#000;font-family:Arial,sans-serif;box-sizing:border-box;position:relative;overflow:hidden}.label-box{display:flex;flex-direction:column;justify-content:space-between}.sender-container{align-self:flex-start;margin:2px 0 0 .35in;max-width:55%}.sender-title{font-size:8.5pt;font-weight:700;margin-bottom:3px}.sender-box{border:1.5px solid #000;padding:5px 9px;font-size:7.5pt;line-height:1.2;text-align:left}.dest-container{font-size:15pt;line-height:1.35;text-align:left;padding:0 0 6px 0;word-break:break-word}.dest-title{font-size:15pt;font-weight:700;text-align:center;margin-bottom:12px}.dest-container.m{font-size:12pt;line-height:1.3}.dest-container.m .dest-title{font-size:12pt;margin-bottom:8px}.dest-container.s{font-size:9.5pt;line-height:1.25}.dest-container.s .dest-title{font-size:9.5pt;margin-bottom:6px}.lb-page:not(:last-child){break-after:page;page-break-after:always}.pg{max-width:none!important;margin:0!important;overflow-x:auto}body{background:#fff!important}";
+function imprimirSeguro(html,titulo,pageCss,extraCss){
+  var doc='<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+(titulo||'Recibo')+'</title>'
+    +'<style>body{margin:0;background:#e9e9e9;font-family:Arial,sans-serif}.bar{position:sticky;top:0;display:flex;gap:8px;padding:10px;background:#173b59;z-index:2}.bar button{flex:1;padding:12px;border:0;border-radius:10px;font-size:15px;font-weight:700;background:#fff;color:#173b59}.pg{background:#fff;margin:10px auto;max-width:7in}img{max-width:100%}'+(pageCss||'@page{margin:10mm}')+'@media print{.bar{display:none}body{background:#fff}.pg{margin:0}}'+(extraCss||'')+'</style></head>'
+    +'<body><div class="bar"><button onclick="window.print()">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()">Cerrar</button></div><div class="pg">'+html+'</div></body></html>';
+  var w=null;
+  try{w=window.open('','_blank')}catch(e){}
+  if(w){w.document.open();w.document.write(doc);w.document.close();return}
+  var la=$('print-label-area');
+  if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
+  la.innerHTML=html;
+  var stp=null;
+  if(pageCss){stp=document.createElement('style');stp.id='lb_page_style';stp.textContent=pageCss;document.head.appendChild(stp);window.addEventListener('afterprint',function f(){window.removeEventListener('afterprint',f);var x=$('lb_page_style');if(x)x.remove()})}
+  var imgs=Array.prototype.slice.call(la.querySelectorAll('img'));
+  Promise.all(imgs.map(function(im){return im.decode?im.decode().catch(function(){}):Promise.resolve()}))
+    .then(function(){setTimeout(function(){window.print()},300)});
+}
 function imprimirReciboApartado(id){
   var c=S.creditos.filter(function(x){return x.id===id})[0];if(!c)return;
   var la=$('print-label-area');
   if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
-  la.innerHTML=reciboHTML(c);window.print();
+  imprimirSeguro(reciboHTML(c),'Recibo de apartado'+(c.num?' #'+c.num:''));
 }
 function enviarReporteCliente(id){
   var c = S.creditos.find(function(item){ return item.id === id; });
@@ -2391,15 +2405,7 @@ function etiquetaHTML(v){
     + '</div></div></div>';
 }
 function imprimirEtiquetasHTML(html){
-  var la=$('print-label-area');
-  if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
-  la.innerHTML=html;
-  var old=$('lb_page_style');if(old)old.remove();
-  var st=document.createElement('style');st.id='lb_page_style';
-  st.textContent='@page{size:6in 4in;margin:0}';
-  document.head.appendChild(st);
-  var fin=function(){window.removeEventListener('afterprint',fin);var x=$('lb_page_style');if(x)x.remove()};
-  window.addEventListener('afterprint',fin);window.print();
+  imprimirSeguro(html,'Etiqueta de envío','@page{size:6in 4in;margin:0}',LABEL_CSS);
 }
 function imprimirEtiquetaEnvio(id){
   var item = S.items.filter(function(i){ return i.id === id; })[0];
@@ -2867,7 +2873,7 @@ function imprimirComprobanteVenta(id){
   var item=ventaPorId(id);if(!item||!item.dvMeta)return;
   var la=$('print-label-area');
   if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
-  la.innerHTML=comprobanteVentaHTML(item);window.print();
+  imprimirSeguro(comprobanteVentaHTML(item),'Recibo de venta');
 }
 
 var edCtId=null,ctArtTemp=[],CT_Q='',CT_All=false;
@@ -2948,7 +2954,7 @@ function ctImprimir(id){
     +'<table style="width:100%;min-width:0;border-collapse:collapse;margin:14px 0;font-size:14px"><thead><tr><th style="text-align:left;border-bottom:2px solid #000;padding:6px 4px;color:#000">Artículo</th><th style="text-align:right;border-bottom:2px solid #000;padding:6px 4px;color:#000">Monto</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'<div style="text-align:right;font-size:15px"><div>Subtotal: <b>₡'+money(sub)+'</b></div><div>Envío: <b>₡'+money(c.envio||0)+'</b></div><div style="font-size:18px;margin-top:4px">Total cotizado: <b>₡'+money(c.total)+'</b></div></div>'
     +'<div style="margin-top:18px;font-size:12px;color:#444">Emitida el '+shDot(today())+'.</div></div>';
-  window.print();
+  imprimirSeguro(la.innerHTML,'Cotización');
 }
 function ctConvertirVenta(id){
   var c=(S.cotizaciones||[]).filter(function(x){return x.id===id})[0];
@@ -3228,7 +3234,7 @@ function rcHTML(d){
 function imprimirReporteContador(){
   var d=rcDatos(rcMes());
   var la=$('print-label-area');if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
-  la.innerHTML=rcHTML(d);window.print();
+  imprimirSeguro(rcHTML(d),'Reporte para el contador');
 }
 function expReporteContadorCSV(){
   var d=rcDatos(rcMes()),q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"'};
@@ -3515,7 +3521,7 @@ function imImprimir(){
     +'<h3>Proveedores con factura electrónica</h3>'+tb(F.e)+'<h3>Proveedores sin factura electrónica</h3>'+tb(F.ne)
     +'<div style="margin-top:16px;font-size:11px;color:#444">Incluye facturas pendientes de pago. Emitido el '+shDot(today())+'.</div></div>';
   var la=$('print-label-area');if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
-  la.innerHTML=html;window.print();
+  imprimirSeguro(html,'Resumen de compras por proveedor');
 }
 function imCSV(){
   var T=imData(IM_D,IM_H,true),F=imFilas(T),q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"'};
@@ -3687,7 +3693,7 @@ function d270Imprimir(){
     +'<tr><td colspan="3" style="border-top:1px solid #999"><b>Total general</b></td><td style="text-align:right;border-top:1px solid #999"><b>₡'+money(D.total)+'</b></td></tr></table>'
     +'<div style="margin-top:16px;font-size:11px;color:#444">Incluye facturas pendientes de pago. Emitido el '+shDot(today())+'.</div></div>';
   var la=$('print-label-area');if(!la){la=document.createElement('div');la.id='print-label-area';document.body.appendChild(la)}
-  la.innerHTML=html;window.print();
+  imprimirSeguro(html,'Compras por proveedor');
 }
 function d270CSV(){
   var D=d270Data(),q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"'};
