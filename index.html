@@ -2396,10 +2396,11 @@ function imprimirEtiquetaEnvio(id){
   if(!item || !item.dvMeta) return;
   imprimirEtiquetasHTML(etiquetaHTML(item.dvMeta));
 }
-var LB_ConGuia=false,LB_L=[],LB_Sel={};
+var LB_ConGuia=false,LB_L=[],LB_Sel={},LB_Dias=7;
+function lbRango(r){return LB_Dias>1?shDot(r.desde)+' al '+shDot(r.dia):shDot(r.dia)}
 function ventasEnvioDelDia(){
-  var dia=DV_Q||today();
-  return {dia:dia,l:S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&i.dvMeta.tipo!=='bodega'&&i.d===dia}).sort(function(a,b){return a.id<b.id?-1:1})};
+  var dia=DV_Q||today(),desde=addDays(dia,-(LB_Dias-1));
+  return {dia:dia,desde:desde,l:S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&i.dvMeta.tipo!=='bodega'&&i.d>=desde&&i.d<=dia}).sort(function(a,b){return a.d===b.d?(a.id<b.id?-1:1):(a.d<b.d?-1:1)})};
 }
 function sinGuiaDelDia(){
   var r=ventasEnvioDelDia();
@@ -2408,14 +2409,14 @@ function sinGuiaDelDia(){
 function loteBtn(){
   var r=ventasEnvioDelDia(),sg=sinGuiaDelDia().l.length,b;
   var pc=S.items.filter(function(i){return i.t==='v'&&i.dvMeta&&i.dvMeta.tipo!=='bodega'&&String(i.dvMeta.guia||'').trim()&&!i.dvMeta.guiaEnviada}).length;
-  if(!r.l.length)b='<p class="mu" style="margin:6px 0">Sin ventas con datos de envío el '+shDot(r.dia)+'.</p>';
-  else b='<button type="button" class="pri" style="margin:6px 0" onclick="lbAbrir()">🖨️ Etiquetas del día ('+sg+' sin guía) · '+shDot(r.dia)+'</button>';
+  if(!r.l.length)b='<p class="mu" style="margin:6px 0">Sin ventas con datos de envío ('+lbRango(r)+').</p>';
+  else b='<button type="button" class="pri" style="margin:6px 0" onclick="lbAbrir()">🖨️ Etiquetas ('+sg+' sin guía) · '+lbRango(r)+'</button>';
   return b+'<label class="chk"><input type="checkbox" '+(DV_Pend?'checked':'')+' onchange="toggleDvPend(this)"> Solo guías por avisar al cliente ('+pc+')</label>';
 }
 function refreshLote(){var c=$('dv_lote');if(c)c.innerHTML=loteBtn()}
 function lbAbrir(){
   var r=ventasEnvioDelDia();
-  if(!r.l.length){$('st').textContent='No hay ventas con datos de envío el '+shDot(r.dia);return}
+  if(!r.l.length){$('st').textContent='No hay ventas con datos de envío ('+lbRango(r)+')';return}
   LB_ConGuia=!sinGuiaDelDia().l.length;lbArmar(true);
 }
 function lbArmar(todas){
@@ -2425,13 +2426,15 @@ function lbArmar(todas){
   LB_L.forEach(function(i){LB_Sel[i.id]=todas?true:(prev[i.id]!==false)});
   var m=$('lb_modal');if(!m){m=document.createElement('div');m.id='lb_modal';m.className='lbm';document.body.appendChild(m)}
   m.onclick=function(e){if(e.target===m)lbCerrar()};
-  var h='<div><b style="font-size:17px">Etiquetas del '+shDot(r.dia)+'</b><span class="mu">Desmarca las que no quieras imprimir o descargar.</span>'
+  var h='<div><b style="font-size:17px">Etiquetas · '+lbRango(r)+'</b><span class="mu">Desmarca las que no quieras imprimir o descargar.</span>'
+    +'<label class="chk" style="margin:8px 0 0">Período: <select onchange="LB_Dias=+this.value;refreshLote();lbArmar(true)" style="width:auto;margin-left:6px">'
+    +[[1,'Solo el día'],[3,'Últimos 3 días'],[7,'Últimos 7 días'],[14,'Últimos 14 días']].map(function(o){return '<option value="'+o[0]+'"'+(o[0]===LB_Dias?' selected':'')+'>'+o[1]+'</option>'}).join('')+'</select></label>'
     +'<label class="chk" style="margin:8px 0 0"><input type="checkbox" '+(LB_ConGuia?'checked':'')+' onchange="LB_ConGuia=this.checked;lbArmar(false)"> Incluir ventas que ya tienen guía</label>'
     +'<div class="ls">';
   if(!LB_L.length)h+='<p class="mu">No hay ventas para mostrar.</p>';
   LB_L.forEach(function(i,k){
     var v=i.dvMeta;
-    h+='<label class="it"><input type="checkbox" '+(LB_Sel[i.id]?'checked':'')+' onchange="lbTog('+k+',this.checked)"><div class="t"><b>'+esc(v.nombre||'Sin nombre')+'</b><small>'+esc([v.provincia,v.canton,v.distrito].filter(Boolean).join(', '))+(String(v.guia||'').trim()?' · Guía: '+esc(v.guia):' · Sin guía')+'</small></div></label>';
+    h+='<label class="it"><input type="checkbox" '+(LB_Sel[i.id]?'checked':'')+' onchange="lbTog('+k+',this.checked)"><div class="t"><b>'+esc(v.nombre||'Sin nombre')+'</b><small>'+esc([v.provincia,v.canton,v.distrito].filter(Boolean).join(', '))+(String(v.guia||'').trim()?' · Guía: '+esc(v.guia):' · Sin guía')+(LB_Dias>1?' · '+shDot(i.d):'')+'</small></div></label>';
   });
   h+='</div><div class="bt" style="margin-bottom:8px"><button type="button" class="pri sec" onclick="lbTodas(true)">Marcar todas</button><button type="button" class="pri sec" onclick="lbTodas(false)">Desmarcar todas</button></div>'
     +'<div class="bt"><button type="button" class="pri" onclick="lbImprimir()">🖨️ Imprimir (<span class="lbn">0</span>)</button><button type="button" class="pri" onclick="lbPDF()">⬇️ PDF (<span class="lbn">0</span>)</button><button type="button" class="pri sec" onclick="lbCerrar()">Cerrar</button></div></div>';
