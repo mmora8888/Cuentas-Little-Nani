@@ -3844,7 +3844,7 @@ function form(t,ei){
 }
 
 /* ===== Productos desde Instagram → Shopify (con aprobación) ===== */
-var IG={list:[],f:'pendiente',pub:'DRAFT',busy:false,busyId:'',limpiando:false,desde:'',hasta:''};
+var IG={list:[],f:'pendiente',pub:'DRAFT',busy:false,busyId:'',limpiando:false,desde:'',hasta:'',cursor:'',cursorKey:''};
 var IG_LOTE=50;
 var IG_MIN=1000,IG_MAX=300000;
 function igFaltas(p){var f=[];if(!String(p.titulo||'').trim())f.push('título');if(!(+p.precio>0))f.push('precio');if(!(p.imgs&&p.imgs.length))f.push('foto');return f}
@@ -3912,16 +3912,19 @@ function igSync(){
   var de=$('ig_desde'),ha=$('ig_hasta');
   if(de)IG.desde=de.value;if(ha)IG.hasta=ha.value;
   if(IG.desde&&IG.hasta&&IG.desde>IG.hasta){$('st').textContent='La fecha "Desde" no puede ser mayor que "Hasta"';return}
-  var rango=!!(IG.desde||IG.hasta),pl={code:C};
+  var rango=!!(IG.desde||IG.hasta),pl={code:C},key=IG.desde+'|'+IG.hasta;
   if(IG.desde)pl.desde=IG.desde;
   if(IG.hasta)pl.hasta=IG.hasta;
-  IG.busy=true;render();
+  if(IG.cursor&&IG.cursorKey===key)pl.cursor=IG.cursor; // continúa donde quedó la búsqueda anterior
   pl.lote=IG_LOTE;
+  IG.busy=true;render();
   FUNCS.httpsCallable('igSync',{timeout:300000})(pl).then(function(r){
     IG.busy=false;var d=r.data||{},n=d.nuevos||0,mas=!!d.hayMas,msg;
+    IG.cursor=(mas&&d.cursor)?d.cursor:'';IG.cursorKey=key;
+    var prog=d.revisadas?(' Revisé '+d.revisadas+' publicaciones'+(d.ultima?' (hasta el '+d.ultima+')':'')+'.'):'';
     if(n)msg='Listo: '+n+' publicación(es) cargada(s) por revisar'+(mas?'. Toca de nuevo para traer las siguientes':'');
-    else if(mas)msg='Se revisó un tramo sin publicaciones nuevas. Toca de nuevo para seguir buscando';
-    else msg=rango?('Listo: no hay más publicaciones en ese rango'+(d.existentes?' ('+d.existentes+' ya estaban cargadas)':'')):'Listo: no hay más publicaciones por traer';
+    else if(mas)msg='Aún no hay publicaciones nuevas en lo revisado.'+prog+' Toca de nuevo y continúo desde ahí.';
+    else msg=rango?('Listo: no hay más publicaciones en ese rango'+(d.existentes?' ('+d.existentes+' ya estaban cargadas)':'')+'.'+prog):'Listo: no hay más publicaciones por traer.'+prog;
     $('st').textContent=msg;render();
   }).catch(function(e){IG.busy=false;$('st').textContent='Error al traer publicaciones: '+(e&&e.message||e);render()});
 }
@@ -3950,7 +3953,7 @@ function igLimpiar(){
   if(typeof FUNCS==='undefined'||!FUNCS){$('st').textContent='Error: falta el módulo de funciones de Firebase';return}
   IG.limpiando=true;render();
   FUNCS.httpsCallable('igLimpiar',{timeout:120000})({code:C,estado:est}).then(function(r){
-    IG.limpiando=false;var b=(r.data&&r.data.borrados)||0;
+    IG.limpiando=false;IG.cursor='';var b=(r.data&&r.data.borrados)||0;
     $('st').textContent='Listo: '+b+' publicación(es) '+nom+' quitada(s)';render();
   }).catch(function(e){IG.limpiando=false;$('st').textContent='Error al limpiar: '+(e&&e.message||e);render()});
 }
