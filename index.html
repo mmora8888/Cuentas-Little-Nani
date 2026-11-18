@@ -3844,22 +3844,27 @@ function form(t,ei){
 }
 
 /* ===== Productos desde Instagram → Shopify (con aprobación) ===== */
-var IG={list:[],f:'pendiente',pub:'DRAFT',busy:false,busyId:'',limpiando:false,desde:'',hasta:'',cursor:'',cursorKey:''};
+var IG={list:[],src:'instagram',q:'',f:'pendiente',pub:'DRAFT',busy:false,busyId:'',limpiando:false,desde:'',hasta:'',cursor:'',cursorKey:''};
 var IG_LOTE=50;
+function igRed(p){return p&&p.fuente==='facebook'?'facebook':'instagram'}
+function igRedNom(s){return s==='facebook'?'Facebook':'Instagram'}
+function igNorm(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
 var IG_MIN=1000,IG_MAX=300000;
 function igFaltas(p){var f=[];if(!String(p.titulo||'').trim())f.push('título');if(!(+p.precio>0))f.push('precio');if(!(p.imgs&&p.imgs.length))f.push('foto');return f}
 function igUrl(u){return /^https:\/\//i.test(u||'')?u:''}
 function igSection(){
-  var L=IG.list.slice().sort(function(a,b){return (b.fecha||'')>(a.fecha||'')?1:-1});
+  var L=IG.list.filter(function(p){return igRed(p)===IG.src}).sort(function(a,b){return (b.fecha||'')>(a.fecha||'')?1:-1});
   var cnt={pendiente:0,aprobado:0,rechazado:0};
   L.forEach(function(p){var e=p.estado||'pendiente';cnt[e]=(cnt[e]||0)+1});
-  var h='<div class="dash-hero verde"><div class="eyebrow">Instagram → Shopify</div><div class="amount">'+cnt.pendiente+' por aprobar</div><div class="sub">'+cnt.aprobado+' en Shopify · '+cnt.rechazado+' rechazadas</div></div>';
+  var RN=igRedNom(IG.src);
+  var h='<div class="btn-bar">'+[['instagram','📷 Instagram'],['facebook','👍 Facebook']].map(function(x){return '<button type="button" class="pri'+(IG.src===x[0]?'':' sec')+'" onclick="IG.src=\''+x[0]+'\';IG.f=\'pendiente\';render()">'+x[1]+'</button>'}).join('')+'</div>';
+  h+='<div class="dash-hero verde"><div class="eyebrow">'+RN+' → Shopify</div><div class="amount">'+cnt.pendiente+' por aprobar</div><div class="sub">'+cnt.aprobado+' en Shopify · '+cnt.rechazado+' rechazadas</div></div>';
   if(!RO){
     var rg=!!(IG.desde||IG.hasta);
     h+='<div class="dash-panel"><label class="fld-lbl">Traer publicaciones por rango de fechas (opcional)</label><div class="row"><div><label class="fld-lbl">Desde</label><input id="ig_desde" type="date" value="'+esc(IG.desde)+'" max="'+today()+'" onchange="IG.desde=this.value"></div><div><label class="fld-lbl">Hasta</label><input id="ig_hasta" type="date" value="'+esc(IG.hasta)+'" max="'+today()+'" onchange="IG.hasta=this.value"></div></div>'
       +'<div class="mu">'+(rg?'Se traen de a '+IG_LOTE+' por vez dentro de ese rango; toca de nuevo para las siguientes.':'Sin fechas: se traen las publicaciones más recientes que aún no has cargado, de a '+IG_LOTE+' por vez.')+'</div>'
       +(rg?'<button type="button" class="btn-sm" style="margin-top:8px" onclick="IG.desde=\'\';IG.hasta=\'\';render()">Quitar rango</button>':'')+'</div>';
-    h+='<div class="btn-bar"><button type="button" class="pri" onclick="igSync()">'+(IG.busy?'Buscando publicaciones…':(rg?'📥 Traer las siguientes '+IG_LOTE+' del rango':'📥 Traer las siguientes '+IG_LOTE))+'</button></div>';
+    h+='<div class="btn-bar"><button type="button" class="pri" onclick="igSync()">'+(IG.busy?'Buscando publicaciones…':(rg?'📥 Traer las siguientes '+IG_LOTE+' de '+RN+' del rango':'📥 Traer las siguientes '+IG_LOTE+' de '+RN))+'</button></div>';
     h+='<div class="dash-panel"><label class="fld-lbl">Al aprobar, crear el producto en Shopify como</label><select id="ig_pub" onchange="IG.pub=this.value"><option value="DRAFT"'+(IG.pub==='DRAFT'?' selected':'')+'>Borrador (no visible para clientes)</option><option value="ACTIVE"'+(IG.pub==='ACTIVE'?' selected':'')+'>Activo (visible en la tienda)</option></select><div class="mu">Sin precio o sin foto no se puede aprobar.</div></div>';
   }
   h+='<div class="btn-bar">';
@@ -3867,12 +3872,20 @@ function igSection(){
     h+='<button type="button" class="pri'+(IG.f===x[0]?'':' sec')+'" onclick="IG.f=\''+x[0]+'\';render()">'+x[1]+' ('+(cnt[x[0]]||0)+')</button>';
   });
   h+='</div>';
+  h+='<input type="search" id="ig_q" placeholder="🔍 Buscar artículo por nombre..." autocomplete="off" value="'+esc(IG.q)+'" oninput="IG.q=this.value;$(\'ig_list\').innerHTML=igLista()" style="margin-bottom:10px">';
   if(!RO&&(IG.f==='pendiente'||IG.f==='rechazado')&&cnt[IG.f]>0){
     h+='<div class="btn-bar"><button type="button" class="pri bad" onclick="igLimpiar()"'+(IG.limpiando?' disabled':'')+'>'+(IG.limpiando?'Limpiando…':'🗑 Limpiar '+(IG.f==='pendiente'?'pendientes':'rechazadas')+' ('+cnt[IG.f]+')')+'</button></div>';
   }
-  var vis=L.filter(function(p){return (p.estado||'pendiente')===IG.f});
+  h+='<div id="ig_list">'+igLista()+'</div>';
+  return h;
+}
+function igLista(){
+  var q=igNorm(IG.q).trim();
+  var vis=IG.list.filter(function(p){return igRed(p)===IG.src&&(p.estado||'pendiente')===IG.f}).sort(function(a,b){return (b.fecha||'')>(a.fecha||'')?1:-1});
+  if(q)vis=vis.filter(function(p){return igNorm(p.titulo).indexOf(q)>-1||igNorm(p.caption).indexOf(q)>-1});
+  var h='';
   if(!vis.length){
-    h+='<div class="dash-panel"><p class="mu" style="margin:4px 0">'+(IG.f==='pendiente'?'No hay publicaciones por aprobar. Toca "Traer publicaciones nuevas".':'Nada por aquí todavía.')+'</p></div>';
+    h+='<div class="dash-panel"><p class="mu" style="margin:4px 0">'+(q?'No se encontró ningún artículo con ese nombre en esta lista.':(IG.f==='pendiente'?'No hay publicaciones por aprobar. Toca "Traer las siguientes".':'Nada por aquí todavía.'))+'</p></div>';
   }
   vis.forEach(function(p){h+=igCard(p)});
   return h;
@@ -3886,7 +3899,7 @@ function igCard(p){
     h+='</div>';
   }
   var lk=igUrl(p.link);
-  h+='<div class="mu" style="margin-bottom:8px">'+shDot((p.fecha||'').slice(0,10))+(lk?' · <a href="'+esc(lk)+'" target="_blank" rel="noopener" style="color:var(--ac)">Ver en Instagram</a>':'')
+  h+='<div class="mu" style="margin-bottom:8px">'+shDot((p.fecha||'').slice(0,10))+(lk?' · <a href="'+esc(lk)+'" target="_blank" rel="noopener" style="color:var(--ac)">Ver en '+igRedNom(igRed(p))+'</a>':'')
     +'<span class="bd '+(est==='aprobado'?'ok':est==='rechazado'?'bad':'')+'">'+(est==='aprobado'?'En Shopify':est==='rechazado'?'Rechazada':'Pendiente')+'</span></div>';
   if(p.aviso)h+='<div class="dash-alert">'+esc(p.aviso)+'</div>';
   if(p.diag)h+='<div class="mu" style="margin-bottom:8px">'+esc(p.diag)+'</div>';
@@ -3912,7 +3925,7 @@ function igSync(){
   var de=$('ig_desde'),ha=$('ig_hasta');
   if(de)IG.desde=de.value;if(ha)IG.hasta=ha.value;
   if(IG.desde&&IG.hasta&&IG.desde>IG.hasta){$('st').textContent='La fecha "Desde" no puede ser mayor que "Hasta"';return}
-  var rango=!!(IG.desde||IG.hasta),pl={code:C},key=IG.desde+'|'+IG.hasta;
+  var rango=!!(IG.desde||IG.hasta),pl={code:C,fuente:IG.src},key=IG.src+'|'+IG.desde+'|'+IG.hasta,RN=igRedNom(IG.src);
   if(IG.desde)pl.desde=IG.desde;
   if(IG.hasta)pl.hasta=IG.hasta;
   if(IG.cursor&&IG.cursorKey===key)pl.cursor=IG.cursor; // continúa donde quedó la búsqueda anterior
@@ -3921,12 +3934,12 @@ function igSync(){
   FUNCS.httpsCallable('igSync',{timeout:300000})(pl).then(function(r){
     IG.busy=false;var d=r.data||{},n=d.nuevos||0,mas=!!d.hayMas,msg;
     IG.cursor=(mas&&d.cursor)?d.cursor:'';IG.cursorKey=key;
-    var prog=d.revisadas?(' Revisé '+d.revisadas+' publicaciones'+(d.ultima?' (hasta el '+d.ultima+')':'')+'.'):'';
+    var prog=d.revisadas?(' Revisé '+d.revisadas+' publicaciones de '+RN+(d.ultima?' (hasta el '+d.ultima+')':'')+'.'):'';
     if(n)msg='Listo: '+n+' publicación(es) cargada(s) por revisar'+(mas?'. Toca de nuevo para traer las siguientes':'');
     else if(mas)msg='Aún no hay publicaciones nuevas en lo revisado.'+prog+' Toca de nuevo y continúo desde ahí.';
     else msg=rango?('Listo: no hay más publicaciones en ese rango'+(d.existentes?' ('+d.existentes+' ya estaban cargadas)':'')+'.'+prog):'Listo: no hay más publicaciones por traer.'+prog;
     $('st').textContent=msg;render();
-  }).catch(function(e){IG.busy=false;$('st').textContent='Error al traer publicaciones: '+(e&&e.message||e);render()});
+  }).catch(function(e){IG.busy=false;$('st').textContent='Error al traer publicaciones de '+RN+': '+(e&&e.message||e);render()});
 }
 function igAprobar(id){
   if(RO||IG.busyId)return;
@@ -3947,12 +3960,12 @@ function igAprobar(id){
 function igLimpiar(){
   if(RO||IG.limpiando||IG.busy||IG.busyId)return;
   var est=IG.f;if(est!=='pendiente'&&est!=='rechazado')return;
-  var n=IG.list.filter(function(p){return (p.estado||'pendiente')===est}).length;if(!n)return;
+  var n=IG.list.filter(function(p){return igRed(p)===IG.src&&(p.estado||'pendiente')===est}).length;if(!n)return;
   var nom=est==='pendiente'?'pendientes':'rechazadas';
-  if(!confirm('¿Borrar las '+n+' publicaciones '+nom+' cargadas?\n\nSolo se quitan de esta lista: no se borra nada en Instagram ni en Shopify, y las aprobadas no se tocan. Si las vuelves a traer, aparecerán otra vez como pendientes.'))return;
+  if(!confirm('¿Borrar las '+n+' publicaciones '+nom+' de '+igRedNom(IG.src)+' cargadas?\n\nSolo se quitan de esta lista: no se borra nada en Instagram ni en Shopify, y las aprobadas no se tocan. Si las vuelves a traer, aparecerán otra vez como pendientes.'))return;
   if(typeof FUNCS==='undefined'||!FUNCS){$('st').textContent='Error: falta el módulo de funciones de Firebase';return}
   IG.limpiando=true;render();
-  FUNCS.httpsCallable('igLimpiar',{timeout:120000})({code:C,estado:est}).then(function(r){
+  FUNCS.httpsCallable('igLimpiar',{timeout:120000})({code:C,estado:est,fuente:IG.src}).then(function(r){
     IG.limpiando=false;IG.cursor='';var b=(r.data&&r.data.borrados)||0;
     $('st').textContent='Listo: '+b+' publicación(es) '+nom+' quitada(s)';render();
   }).catch(function(e){IG.limpiando=false;$('st').textContent='Error al limpiar: '+(e&&e.message||e);render()});
