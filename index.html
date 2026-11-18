@@ -2373,8 +2373,8 @@ function saveDetalleVentaItem(){
   if(bodega && !nombre) nombre = 'Generico';
   if(!nombre){ $('st').textContent = 'Indica el nombre del cliente'; return; }
   if(!dvArticulosTemp.length){ $('st').textContent = 'Agrega al menos un artículo a la venta'; return; }
-  var invalidArt = dvArticulosTemp.some(function(art){ return !art.desc.trim() || !(art.precio > 0); });
-  if(invalidArt){ $('st').textContent = 'Todos los artículos deben tener descripción y un precio mayor a 0'; return; }
+  var invalidArt = dvArticulosTemp.some(function(art){ return !art.desc.trim() || !(art.precio >= 0); });
+  if(invalidArt){ $('st').textContent = 'Todos los artículos deben tener descripción y un precio válido (cero o mayor)'; return; }
 
   var prevDv = edDvId ? S.items.filter(function(i){ return i.id === edDvId; })[0] : null;
   if(bodega && prevDv && prevDv.dvMeta && prevDv.dvMeta.tipo !== 'bodega'){
@@ -2395,7 +2395,7 @@ function saveDetalleVentaItem(){
 
   var subtotal = dvArticulosTemp.reduce(function(acc, art){ return acc + (art.precio || 0); }, 0);
   var montoTotal = subtotal + envio;
-  if(!(montoTotal > 0)){ $('st').textContent = 'El monto total debe ser mayor a 0'; return; }
+  if(!(montoTotal >= 0)){ $('st').textContent = 'El monto total no puede ser negativo'; return; }
 
   var id = edDvId || ('dv-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
   var ventaObj = {
