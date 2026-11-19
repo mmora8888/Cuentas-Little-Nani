@@ -555,24 +555,24 @@ function expDescargar(data,msg){
   $('st').textContent=msg;
   if(tab==='r')render();
 }
-function expArmar(items,creditos,cotizaciones,cxp,cfg,aviso){
-  cfg=cfg||{};
+function expArmar(items,creditos,cotizaciones,cxp,ajustes,igpend,cfg,aviso){
+  cfg=cfg||{};ajustes=ajustes||[];igpend=igpend||[];
   var v=0,f=0,g=0;
   items.forEach(function(i){var a=Number(i&&i.a)||0;if(i&&i.t==='v')v+=a;else if(i&&i.t==='f')f+=a;else if(i&&i.t==='g')g+=a});
   return {
-    app:'Little Nani',version:'3.0',fechaExportacion:today(),
-    items:items,creditos:creditos,cotizaciones:cotizaciones,cxp:cxp,
+    app:'Little Nani',version:'4.0',fechaExportacion:today(),
+    items:items,creditos:creditos,cotizaciones:cotizaciones,cxp:cxp,ajustes:ajustes,igpend:igpend,
     config:cfg,
     saldo:cfg.saldo,ahorros:cfg.ahorros,cuentasBancarias:cfg.cuentasBancarias||{},tipoCambioUSD:cfg.tipoCambioUSD||0,
     casaMesCerrado:cfg.casaMesCerrado||'',casaPeriodoActivo:cfg.casaPeriodoActivo||'',casaPeriodoNombre:cfg.casaPeriodoNombre||'',
-    totales:{items:items.length,creditos:creditos.length,cotizaciones:cotizaciones.length,cxp:cxp.length,ventas:r2(v),facturas:r2(f),gastos:r2(g)},
+    totales:{items:items.length,creditos:creditos.length,cotizaciones:cotizaciones.length,cxp:cxp.length,ajustes:ajustes.length,igpend:igpend.length,ventas:r2(v),facturas:r2(f),gastos:r2(g)},
     aviso:aviso||''
   };
 }
 function expJSON(){
   if(!FS||!P){$('st').textContent='No hay conexión con la base de datos: no se puede generar el respaldo.';return Promise.resolve(false)}
   $('st').textContent='Preparando respaldo completo…';
-  var cols=['items','creditos','cotizaciones','cxp','ajustes'];
+  var cols=['items','creditos','cotizaciones','cxp','ajustes','igpend'];
   var leer=function(opt){return Promise.all(cols.map(function(c){return FS.collection(P+c).get(opt)}).concat(FS.doc(P+'config/main').get(opt)))};
   var aviso='';
   return leer({source:'server'}).catch(function(){
@@ -580,32 +580,48 @@ function expJSON(){
     return leer({source:'cache'});
   }).then(function(r){
     var lista=function(q){return q.docs.map(function(d){var x=d.data();if(x.id==null)x.id=d.id;else if(x.id!==d.id)x._docId=d.id;return x})};
-    var items=lista(r[0]),cred=lista(r[1]),cots=lista(r[2]),cxs=lista(r[3]),aj=lista(r[4]),cfg=r[5].exists?r[5].data():{};
+    var items=lista(r[0]),cred=lista(r[1]),cots=lista(r[2]),cxs=lista(r[3]),aj=lista(r[4]),ig=lista(r[5]),cfg=r[6].exists?r[6].data():{};
     var visibles=S.items.length,extra=items.length-visibles;
-    var data=expArmar(items,cred,cots,cxs,cfg,aviso);data.ajustes=aj;
-    expDescargar(data,(aviso?'⚠️ '+aviso+' ':'')+'Respaldo descargado con TODOS los datos: '+items.length+' movimientos'+(extra>0?' (incluye '+extra+' que la app no muestra por datos incompletos)':'')+', '+cred.length+' apartados, '+cots.length+' cotizaciones, '+cxs.length+' cuentas por pagar y la configuración completa.');
+    var data=expArmar(items,cred,cots,cxs,aj,ig,cfg,aviso);
+    expDescargar(data,(aviso?'⚠️ '+aviso+' ':'')+'Respaldo completo: '+items.length+' movimientos, '+cred.length+' apartados, '+cots.length+' cotizaciones, '+cxs.length+' cuentas por pagar, '+aj.length+' ajustes, '+ig.length+' pedidos pendientes y configuración completa.');
     return true;
   }).catch(function(e){
     if(!S||!S.items)return false;
-    var aviso2='No se pudo leer la base de datos ('+(e&&e.message?e.message:'error')+'). Este respaldo viene de lo que muestra la pantalla y podría estar incompleto.';
-    var d=expArmar(S.items,S.creditos||[],S.cotizaciones||[],S.cxp||[],{saldo:S.saldo,ahorros:S.ahorros,cuentasBancarias:S.cuentas,tipoCambioUSD:S.tipoCambioUSD,casaMesCerrado:S.casaMesCerrado,casaPeriodoActivo:S.casaPeriodoActivo,casaPeriodoNombre:S.casaPeriodoNombre},aviso2);d.ajustes=S.ajustes||[];
+    var aviso2='No se pudo leer la base de datos ('+(e&&e.message?e.message:'error')+'). Este respaldo usa los datos disponibles en pantalla y podría estar incompleto.';
+    var d=expArmar(S.items,S.creditos||[],S.cotizaciones||[],S.cxp||[],S.ajustes||[],IG.list||[],{saldo:S.saldo,ahorros:S.ahorros,cuentasBancarias:S.cuentas,tipoCambioUSD:S.tipoCambioUSD,casaMesCerrado:S.casaMesCerrado,casaPeriodoActivo:S.casaPeriodoActivo,casaPeriodoNombre:S.casaPeriodoNombre},aviso2);
     expDescargar(d,'⚠️ '+aviso2);
     return true;
   });
 }
 
-function commitChunks(col,arr,pre){
-  var ps=[];
-  for(var i=0;i<arr.length;i+=400){
-    var b=FS.batch();
-    arr.slice(i,i+400).forEach(function(x){
-      var id=x._docId||x.id;if(!id)id=pre+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-      var y=Object.assign({},x);delete y._docId;if(!y.id)y.id=id;
-      b.set(FS.doc(P+col+'/'+id),y);
-    });
-    ps.push(b.commit());
+function backupDocId(x,pre,idx){
+  var id=x&& (x._docId||x.id);
+  if(id==null||id==='')id=pre+idx;
+  id=String(id);
+  if(!/^[\w-]+$/.test(id))throw new Error('ID de documento no válido en el respaldo: '+id);
+  return id;
+}
+function backupWriteChunks(col,arr,pre){
+  var seen={},jobs=[],i;
+  arr.forEach(function(x,n){var id=backupDocId(x,pre,n);if(seen[id])throw new Error('El respaldo contiene IDs duplicados en '+col+': '+id);seen[id]=true;});
+  for(i=0;i<arr.length;i+=400){
+    (function(chunk,start){jobs.push(function(){var b=FS.batch();chunk.forEach(function(x,n){var id=backupDocId(x,pre,start+n),y=Object.assign({},x);delete y._docId;if(y.id==null)y.id=id;b.set(FS.doc(P+col+'/'+id),y)});return b.commit()})})(arr.slice(i,i+400),i);
   }
-  return ps;
+  return jobs.reduce(function(p,job){return p.then(job)},Promise.resolve());
+}
+function backupDeleteChunks(refs){
+  var jobs=[];
+  for(var i=0;i<refs.length;i+=400){(function(chunk){jobs.push(function(){var b=FS.batch();chunk.forEach(function(r){b.delete(r)});return b.commit()})})(refs.slice(i,i+400))}
+  return jobs.reduce(function(p,job){return p.then(job)},Promise.resolve());
+}
+function backupReplaceCollection(col,arr,pre){
+  return FS.collection(P+col).get({source:'server'}).then(function(snap){
+    var keep={};arr.forEach(function(x,n){keep[backupDocId(x,pre,n)]=true});
+    return backupWriteChunks(col,arr,pre).then(function(){
+      var extra=snap.docs.filter(function(d){return !keep[d.id]}).map(function(d){return d.ref});
+      return backupDeleteChunks(extra);
+    });
+  });
 }
 function impJSON(el){
   var fl=el.files&&el.files[0];
@@ -614,32 +630,41 @@ function impJSON(el){
   rd.onload=function(){
     try{
       var data=JSON.parse(String(rd.result));
-      if(!data||!Array.isArray(data.items)){
-        $('st').textContent='El archivo JSON no tiene un formato de respaldo válido.';el.value='';return;
-      }
-      if(!Array.isArray(data.creditos))data.creditos=[];
-      var cots=Array.isArray(data.cotizaciones)?data.cotizaciones:[];
-      var cxs=Array.isArray(data.cxp)?data.cxp:[];
-      if(!confirm('⚠️ Se cargarán en la base de datos actual: '+data.items.length+' movimientos, '+data.creditos.length+' apartados, '+cots.length+' cotizaciones y '+cxs.length+' cuentas por pagar del respaldo'+(data.fechaExportacion?' ('+shDot(data.fechaExportacion)+')':'')+'. Los registros con el mismo ID se sobrescriben; no se borra nada. ¿Continuar?')){el.value='';return;}
-      var ps=commitChunks('items',data.items,'item-').concat(commitChunks('creditos',data.creditos,'cr-'),commitChunks('cotizaciones',cots,'ct-'),commitChunks('cxp',cxs,'cx-'),commitChunks('ajustes',(Array.isArray(data.ajustes)?data.ajustes:[]).filter(function(a){return a&&/^[\w-]+$/.test(a.id||'')&&typeof a.m==='number'}),'aj-'));
+      if(!data||!Array.isArray(data.items))throw new Error('El archivo no contiene una lista válida de movimientos.');
+      var specs=[['items',data.items,'item-'],['creditos',data.creditos,'cr-'],['cotizaciones',data.cotizaciones,'ct-'],['cxp',data.cxp,'cx-'],['ajustes',data.ajustes,'aj-'],['igpend',data.igpend,'ig-']];
+      specs=specs.filter(function(x){return Array.isArray(x[1])});
       var cfg={};
-      if(typeof data.saldo==='number')cfg.saldo=data.saldo;
-      if(data.ahorros)cfg.ahorros=data.ahorros;
-      if(data.cuentasBancarias&&typeof data.cuentasBancarias==='object')cfg.cuentasBancarias=data.cuentasBancarias;
-      if(typeof data.tipoCambioUSD==='number')cfg.tipoCambioUSD=data.tipoCambioUSD;
-      if(typeof data.casaMesCerrado==='string')cfg.casaMesCerrado=data.casaMesCerrado;
-      if(typeof data.casaPeriodoActivo==='string')cfg.casaPeriodoActivo=data.casaPeriodoActivo;
-      if(typeof data.casaPeriodoNombre==='string')cfg.casaPeriodoNombre=data.casaPeriodoNombre;
-      if(data.config&&typeof data.config==='object'&&!Array.isArray(data.config))cfg=Object.assign({},cfg,data.config);
-      if(Object.keys(cfg).length)ps.push(FS.doc(P+'config/main').set(cfg,{merge:true}));
-      Promise.all(ps).then(function(){
-        $('st').textContent='Respaldo restaurado: '+data.items.length+' movimientos, '+data.creditos.length+' apartados, '+cots.length+' cotizaciones y '+cxs.length+' cuentas por pagar.';
+      if(data.config&&typeof data.config==='object'&&!Array.isArray(data.config))cfg=Object.assign({},data.config);
+      else {
+        if(typeof data.saldo==='number')cfg.saldo=data.saldo;
+        if(data.ahorros&&typeof data.ahorros==='object')cfg.ahorros=data.ahorros;
+        if(data.cuentasBancarias&&typeof data.cuentasBancarias==='object')cfg.cuentasBancarias=data.cuentasBancarias;
+        if(typeof data.tipoCambioUSD==='number')cfg.tipoCambioUSD=data.tipoCambioUSD;
+        if(typeof data.casaMesCerrado==='string')cfg.casaMesCerrado=data.casaMesCerrado;
+        if(typeof data.casaPeriodoActivo==='string')cfg.casaPeriodoActivo=data.casaPeriodoActivo;
+        if(typeof data.casaPeriodoNombre==='string')cfg.casaPeriodoNombre=data.casaPeriodoNombre;
+      }
+      specs.forEach(function(sp){var seen={};sp[1].forEach(function(x,n){var id=backupDocId(x,sp[2],n);if(seen[id])throw new Error('IDs duplicados en '+sp[0]+': '+id);seen[id]=true})});
+      var detalle=specs.map(function(sp){return sp[0]+': '+sp[1].length}).join(', ');
+      var omitidas=['creditos','cotizaciones','cxp','ajustes','igpend'].filter(function(k){return !Array.isArray(data[k])});
+      if(!confirm('⚠️ RESTAURACIÓN COMPLETA. Se reemplazarán los datos actuales por los del respaldo ('+(data.fechaExportacion?shDot(data.fechaExportacion):'fecha no indicada')+'). Colecciones: '+detalle+'. La configuración también será reemplazada.'+(omitidas.length?' Este respaldo antiguo no contiene: '+omitidas.join(', ')+', y esas colecciones se conservarán sin cambios.':'')+' Esta operación eliminará registros actuales que no estén en el respaldo. ¿Continuar?')){el.value='';return;}
+      if(!FS||!P)throw new Error('No hay conexión con la base de datos.');
+      $('st').textContent='Restaurando respaldo: preparando datos…';
+      var chain=Promise.resolve();
+      specs.forEach(function(sp){chain=chain.then(function(){$('st').textContent='Restaurando '+sp[0]+'…';return backupReplaceCollection(sp[0],sp[1],sp[2])})});
+      chain=chain.then(function(){
+        var hasCfg=Object.prototype.hasOwnProperty.call(data,'config')||['saldo','ahorros','cuentasBancarias','tipoCambioUSD','casaMesCerrado','casaPeriodoActivo','casaPeriodoNombre'].some(function(k){return Object.prototype.hasOwnProperty.call(data,k)});
+        if(!hasCfg)return;
+        $('st').textContent='Restaurando configuración…';return FS.doc(P+'config/main').set(cfg);
+      });
+      chain.then(function(){
+        $('st').textContent='Respaldo restaurado correctamente. '+detalle+'.';
         el.value='';render();
       }).catch(function(err){
-        $('st').textContent='Error al restaurar respaldo en Firestore: '+err.message;el.value='';
+        $('st').textContent='La restauración se interrumpió: '+err.message+'. Revisa los datos antes de continuar; algunas colecciones podrían haberse restaurado y otras no.';el.value='';
       });
     }catch(e){
-      $('st').textContent='No se pudo leer el archivo JSON: '+e.message;el.value='';
+      $('st').textContent='No se pudo validar el respaldo: '+e.message;el.value='';
     }
   };
   rd.readAsText(fl,'text/plain');
