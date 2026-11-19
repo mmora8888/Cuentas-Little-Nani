@@ -1926,7 +1926,7 @@ function esBodega(i){return !!(i && i.dvMeta && i.dvMeta.tipo === 'bodega')}
 function esVentaEnvio(i){
   if(!i||i.t!=='v'||!i.dvMeta)return false;
   var v=i.dvMeta;
-  if(v.tipo==='bodega')return false;
+  if(v.tipo==='bodega' || v.tipo==='entrega')return false;
   /* ventas antiguas que dicen "Recoge en bodega" en la dirección, sin provincia/cantón/distrito ni guía */
   if(!String(v.guia||'').trim()&&!String(v.provincia||'').trim()&&!String(v.canton||'').trim()&&!String(v.distrito||'').trim()&&/bodega/i.test(String(v.otrosDatos||'')))return false;
   if(v.tipo==='envio')return true;
@@ -2419,31 +2419,34 @@ function waFoto(inp){
 /* ===== fin TRAER DATOS DE WHATSAPP ===== */
 
 function setDvTipo(t){
-  dvTipo = t; var b = (t === 'bodega');
-  var show = function(id, on){ var e = $(id); if(e) e.style.display = on ? '' : 'none'; };
-  show('dv_form_body', true); show('dv_wa_wrap', !b); show('dv_guia_wrap', !b); show('dv_tel_wrap', !b); show('dv_envio_box', !b);
-  var bb = $('dv_tp_bodega'), be = $('dv_tp_envio');
+  dvTipo = t; var b = (t === 'bodega'), e = (t === 'entrega'), logistica = (t === 'envio' || e);
+  var show = function(id, on){ var el = $(id); if(el) el.style.display = on ? '' : 'none'; };
+  show('dv_form_body', true); show('dv_wa_wrap', t === 'envio'); show('dv_guia_wrap', t === 'envio'); show('dv_tel_wrap', logistica); show('dv_envio_box', logistica);
+  var bb = $('dv_tp_bodega'), be = $('dv_tp_envio'), bt = $('dv_tp_entrega');
   if(bb) bb.className = 'pri' + (b ? '' : ' sec');
-  if(be) be.className = 'pri' + (b ? ' sec' : '');
+  if(be) be.className = 'pri' + (t === 'envio' ? '' : ' sec');
+  if(bt) bt.className = 'pri' + (e ? '' : ' sec');
   var l = $('dv_nombre_lbl'); if(l) l.textContent = b ? 'Nombre del cliente (opcional)' : 'Nombre del cliente';
   var n = $('dv_nombre');
   if(n){ if(b && !n.value.trim()) n.value = 'Generico'; else if(!b && n.value.trim() === 'Generico') n.value = ''; }
-  var tl = $('dv_total_lbl'); if(tl) tl.textContent = b ? 'Total venta:' : 'Total Venta + Envío:';
+  var tl = $('dv_total_lbl'); if(tl) tl.textContent = b ? 'Total venta:' : (e ? 'Total Venta + Entrega:' : 'Total Venta + Envío:');
+  var el = document.querySelector('#dv_envio_box .fld-lbl'); if(el) el.textContent = e ? 'Costo de entrega' : 'Monto de envío';
+  var pl = $('dv_otros'); if(pl) pl.placeholder = e ? 'Lugar de entrega / señas' : 'Color de casa, referencias...';
   actualizarTotalVentaCalculado();
 }
 function saveDetalleVentaItem(){
   var tipo = dvTipo;
-  if(tipo !== 'bodega' && tipo !== 'envio'){ $('st').textContent = 'Primero elige si es Recoge en Bodega o Venta con Envío'; return; }
-  var bodega = (tipo === 'bodega');
+  if(tipo !== 'bodega' && tipo !== 'envio' && tipo !== 'entrega'){ $('st').textContent = 'Primero elige cómo se entrega esta venta'; return; }
+  var bodega = (tipo === 'bodega'), esEntrega = (tipo === 'entrega'), logistica = !bodega;
   var fecha = $('dv_fecha').value || today();
   var nombre = $('dv_nombre').value.trim();
-  var tel = bodega ? '' : $('dv_tel').value.trim();
-  var provincia = bodega ? '' : $('dv_provincia').value.trim();
-  var canton = bodega ? '' : $('dv_canton').value.trim();
-  var distrito = bodega ? '' : $('dv_distrito').value.trim();
-  var otrosDatos = bodega ? '' : $('dv_otros').value.trim();
-  var envio = bodega ? 0 : (parseFloat(String($('dv_envio').value).replace(',','.')) || 0);
-  var guia = bodega ? '' : $('dv_guia').value.trim();
+  var tel = logistica ? $('dv_tel').value.trim() : '';
+  var provincia = logistica ? $('dv_provincia').value.trim() : '';
+  var canton = logistica ? $('dv_canton').value.trim() : '';
+  var distrito = logistica ? $('dv_distrito').value.trim() : '';
+  var otrosDatos = logistica ? $('dv_otros').value.trim() : '';
+  var envio = logistica ? (parseFloat(String($('dv_envio').value).replace(',','.')) || 0) : 0;
+  var guia = tipo === 'envio' ? $('dv_guia').value.trim() : '';
 
   if(bodega && !nombre) nombre = 'Generico';
   if(!nombre){ $('st').textContent = 'Indica el nombre del cliente'; return; }
@@ -2481,7 +2484,7 @@ function saveDetalleVentaItem(){
       tipo: tipo,
       nombre: nombre, tel: tel, provincia: provincia, canton: canton, distrito: distrito, otrosDatos: otrosDatos,
       articulos: dvArticulosTemp, envio: Math.round(envio * 100) / 100, guia: guia,
-      guiaEnviada: (!bodega && prevDv && prevDv.dvMeta && prevDv.dvMeta.guia === guia) ? (prevDv.dvMeta.guiaEnviada || '') : ''
+      guiaEnviada: (tipo === 'envio' && prevDv && prevDv.dvMeta && prevDv.dvMeta.guia === guia) ? (prevDv.dvMeta.guiaEnviada || '') : ''
     }
   };
 
@@ -2495,7 +2498,7 @@ function editDetalleVenta(id){
   var item = S.items.filter(function(i){ return i.id === id; })[0];
   if(!item || !item.dvMeta) return;
   edDvId = id;
-  dvTipo = (item.dvMeta.tipo === 'bodega') ? 'bodega' : 'envio';
+  dvTipo = (item.dvMeta.tipo === 'bodega') ? 'bodega' : (item.dvMeta.tipo === 'entrega' ? 'entrega' : 'envio');
   setTimeout(function(){
     if($('dv_fecha')) $('dv_fecha').value = item.d;
     if($('dv_guia')) $('dv_guia').value = item.dvMeta.guia || '';
@@ -2784,6 +2787,16 @@ function renderDetallesVentasList(){
     }
     var artsStr = (v.articulos || []).map(function(a){ return a.desc + ' (₡' + money(a.precio) + ')'; }).join(', ');
     var tieneGuia = v.guia && v.guia.trim() !== '';
+    if(v.tipo === 'entrega'){
+      var destinoEntrega = [v.provincia,v.canton,v.distrito,v.otrosDatos].filter(Boolean).join(', ');
+      return '<div class="dash-panel"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><div>'
+        + '<b style="font-size:15.5px">'+esc(v.nombre||'Cliente')+'</b> <span class="bd ok">₡'+money(item.a)+'</span> <span class="bd">🚚 Entrega</span>'
+        + '<div class="mu" style="margin-top:2px">Fecha: '+shDot(item.d)+(v.tel?' · Tel: '+esc(v.tel):'')+'</div>'
+        + '<div style="font-size:13.5px;margin-top:5px"><b>Artículos:</b> '+esc(artsStr)+'</div>'
+        + '<div class="mu" style="margin-top:2px"><b>Costo de entrega:</b> ₡'+money(v.envio)+' · <b>Lugar de entrega:</b> '+esc(destinoEntrega||'Sin especificar')+'</div>'
+        + '</div><div style="display:flex;gap:5px"><button class="btn-sm" onclick="editDetalleVenta(\''+item.id+'\')">Editar</button><button class="btn-sm bad" onclick="eliminarDetalleVenta(\''+item.id+'\')">✕</button></div></div>'
+        + '<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><button class="pri sec" style="width:auto;padding:8px 12px;font-size:13px" onclick="imprimirComprobanteVenta(\''+item.id+'\')">🧾 Recibo</button></div></div>';
+    }
     
     return '<div class="dash-panel">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><div>'
@@ -2834,7 +2847,7 @@ function detallesVentasSection(){
   S.items.forEach(function(i){if(i.t!=='v')return;if(i.d===t)vh+=i.a;if(wk(i.d)===w)vs+=i.a;if(i.d.slice(0,7)===m)vm+=i.a});
   var ctAb=(S.cotizaciones||[]).filter(function(c){return c.estado!=='convertida'}).length;
   var sinGuia=S.items.filter(function(i){return esVentaEnvio(i)&&!String(i.dvMeta.guia||'').trim()}).length;
-  var tp = dvTipo || (edObj && edObj.dvMeta ? (edObj.dvMeta.tipo==='bodega'?'bodega':'envio') : '');
+  var tp = dvTipo || (edObj && edObj.dvMeta ? (edObj.dvMeta.tipo==='bodega'?'bodega':(edObj.dvMeta.tipo==='entrega'?'entrega':'envio')) : '');
   dvTipo = tp;
   var dm = (edObj && edObj.dvMeta) ? edObj.dvMeta : null;
 
@@ -2851,6 +2864,7 @@ function detallesVentasSection(){
         + '<div class="btn-bar" style="margin-bottom:8px">'
         + '<button type="button" id="dv_tp_bodega" class="pri'+(tp==='bodega'?'':' sec')+'" onclick="setDvTipo(\'bodega\')">🏬 Recoge en Bodega</button>'
         + '<button type="button" id="dv_tp_envio" class="pri'+(tp==='envio'?'':' sec')+'" onclick="setDvTipo(\'envio\')">📦 Venta con Envío</button>'
+        + '<button type="button" id="dv_tp_entrega" class="pri'+(tp==='entrega'?'':' sec')+'" onclick="setDvTipo(\'entrega\')">🚚 Entrega</button>'
         + '</div>'
         + '<div id="dv_form_body" style="'+(tp?'':'display:none')+'">'
         + '<div id="dv_wa_wrap" style="'+(tp==='envio'?'':'display:none')+'"><button type="button" class="pri sec" onclick="waAbrir()">💬 Traer de WhatsApp</button><div id="dv_wa_msg" class="mu" style="margin:8px 0"></div></div>'
@@ -2860,13 +2874,13 @@ function detallesVentasSection(){
         + '</div>'
         + '<div class="row">'
         + '<div><label class="fld-lbl" id="dv_nombre_lbl">'+(tp==='bodega'?'Nombre del cliente (opcional)':'Nombre del cliente')+'</label><input id="dv_nombre" placeholder="Nombre completo" value="'+(dm ? esc(dm.nombre||'') : (tp==='bodega'?'Generico':''))+'"></div>'
-        + '<div id="dv_tel_wrap" style="'+(tp==='envio'?'':'display:none')+'"><label class="fld-lbl">Teléfono</label><input id="dv_tel" placeholder="8888-8888" inputmode="tel" value="'+(dm ? esc(dm.tel||'') : '')+'"></div>'
+        + '<div id="dv_tel_wrap" style="'+((tp==='envio'||tp==='entrega')?'':'display:none')+'"><label class="fld-lbl">Teléfono</label><input id="dv_tel" placeholder="8888-8888" inputmode="tel" value="'+(dm ? esc(dm.tel||'') : '')+'"></div>'
         + '</div>'
         + '<label class="fld-lbl" style="margin-top:4px">Artículos de la venta</label>'
         + '<div id="dv_articulos_container"></div>'
         + '<button type="button" class="pri sec" style="margin-bottom:10px" onclick="agregarArticuloTemp(\'\', \'\')">+ Agregar Artículo</button>'
-        + '<div id="dv_envio_box" style="'+(tp==='envio'?'':'display:none')+'">'
-        + '<label class="fld-lbl">Monto de envío</label>'
+        + '<div id="dv_envio_box" style="'+((tp==='envio'||tp==='entrega')?'':'display:none')+'">'
+        + '<label class="fld-lbl">'+(tp==='entrega'?'Costo de entrega':'Monto de envío')+'</label>'
         + '<input id="dv_envio" type="number" inputmode="decimal" step="0.01" placeholder="0.00" value="'+(dm ? dm.envio : '')+'" oninput="actualizarTotalVentaCalculado()">'
         + '<div class="row">'
         + '<div><label class="fld-lbl">Provincia</label><input id="dv_provincia" placeholder="Provincia" autocomplete="off" autocapitalize="words" oninput="geoIn(\'provincia\')" onfocus="geoIn(\'provincia\')" onblur="geoBlur()" onkeydown="geoKey(event,\'provincia\')" value="'+(dm ? esc(dm.provincia||'') : '')+'"></div>'
@@ -2877,7 +2891,7 @@ function detallesVentasSection(){
         + '<label class="fld-lbl">Dirección exacta / señas</label>'
         + '<input id="dv_otros" placeholder="Color de casa, referencias..." value="'+(dm ? esc(dm.otrosDatos||'') : '')+'">'
         + '</div>'
-        + '<div style="margin:10px 0;text-align:right;font-size:16px"><span id="dv_total_lbl">'+(tp==='bodega'?'Total venta:':'Total Venta + Envío:')+'</span> <b id="dv_total_preview" class="pos">₡0.00</b></div>'
+        + '<div style="margin:10px 0;text-align:right;font-size:16px"><span id="dv_total_lbl">'+(tp==='bodega'?'Total venta:':(tp==='entrega'?'Total Venta + Entrega:':'Total Venta + Envío:'))+'</span> <b id="dv_total_preview" class="pos">₡0.00</b></div>'
         + '<button type="button" class="pri" onclick="saveDetalleVentaItem()">'+(edObj ? 'Guardar Cambios' : 'Registrar Venta')+'</button>'
         + (edObj ? '<button type="button" class="pri sec" style="margin-top:8px" onclick="cancelEditDetalleVenta()">Cancelar</button>' : '')
         + '</div>'
@@ -3049,7 +3063,7 @@ function comprobanteVentaHTML(item){
     +(dir?'<div><b>Ubicación:</b> '+esc(dir)+'</div>':'')
     +(v.otrosDatos?'<div><b>Dirección:</b> '+esc(v.otrosDatos)+'</div>':'')
     +'<table style="width:100%;min-width:0;border-collapse:collapse;margin:14px 0;font-size:14px"><thead><tr><th style="text-align:left;border-bottom:2px solid #000;padding:6px 4px;color:#000">Artículo</th><th style="text-align:right;border-bottom:2px solid #000;padding:6px 4px;color:#000">Monto</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +'<div style="text-align:right;font-size:15px">'+(bod?'':'<div>Subtotal artículos: <b>₡'+money(t.sub)+'</b></div><div>Envío: <b>₡'+money(t.env)+'</b></div>')+'<div style="font-size:18px;margin-top:4px">Total pagado: <b>₡'+money(t.total)+'</b></div></div>'
+    +'<div style="text-align:right;font-size:15px">'+(bod?'':'<div>Subtotal artículos: <b>₡'+money(t.sub)+'</b></div><div>'+(v.tipo==='entrega'?'Costo de entrega':'Envío')+': <b>₡'+money(t.env)+'</b></div>')+'<div style="font-size:18px;margin-top:4px">Total pagado: <b>₡'+money(t.total)+'</b></div></div>'
     +'<div style="margin-top:18px;font-size:12px;color:#444">Emitido el '+shDot(today())+'. ¡Gracias por su compra!</div></div>';
 }
 function imprimirComprobanteVenta(id){
