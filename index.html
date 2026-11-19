@@ -647,14 +647,15 @@ function impJSON(el){
 
 function expCreditos(){
   var q=function(s){return '"'+String(s==null?'':s).replace(/"/g,'""')+'"'};
-  var rows=[['Núm. Apartado','Fecha','Plazo (días)','Fecha Límite','Cliente','Teléfono','Descripción','Monto Total','Abonado','Saldo Pendiente', 'Estado', 'Atrasado','En bodega','Ubicación','Entregado','Fecha entrega']].concat(
+  var rows=[['Núm. Apartado','Fecha','Plazo (días)','Fecha Límite','Cliente','Teléfono','Descripción','Monto Total','Abonado','Saldo Pendiente', 'Estado', 'Atrasado','En bodega','Ubicación','Entregado','Fecha entrega','Detalle por artículo']].concat(
     S.creditos.map(function(c){
       var pend = Math.round((c.monto - c.pagado)*100)/100;
       var est = pend <= 0 ? 'Pagado' : 'Pendiente';
       var diasPlazo = parseInt(c.plazo) || 0;
       var fechaLimite = diasPlazo > 0 ? addDays(c.fecha, diasPlazo) : '';
       var atrasado = (diasPlazo > 0 && pend > 0 && fechaLimite < today()) ? 'Sí' : 'No';
-      return [c.num || '', shDot(c.fecha), c.plazo || '', (fechaLimite ? shDot(fechaLimite) : ''), c.nombre, c.tel||'', c.desc||'', c.monto, c.pagado, pend, est, atrasado, (c.enBodega?'Sí':'No'), c.ubicacion||'', (c.entregado?'Sí':'No'), c.fechaEntrega||''];
+      var arts=crArticulosDe(c),detalle=arts.map(function(a){return '• '+a.desc+(a.precio?' — ₡'+money(a.precio):'')+' | '+(a.enBodega?'En bodega':'Pendiente de bodega')+' | '+(a.ubicacion||'Sin ubicación')}).join('\n');
+       return [c.num || '', shDot(c.fecha), c.plazo || '', (fechaLimite ? shDot(fechaLimite) : ''), c.nombre, c.tel||'', c.desc||'', c.monto, c.pagado, pend, est, atrasado, (crTodosBodega(c)?'Sí':'No'), crUbicaciones(c).join(' / '), (c.entregado?'Sí':'No'), c.fechaEntrega||'',detalle];
     })
   );
   var b=new Blob(['\ufeff'+rows.map(function(r){return r.map(q).join(',')}).join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
@@ -1313,6 +1314,19 @@ function ubicLeer(){
   var ex=ubicLista().filter(function(x){return x.toLowerCase()===t.toLowerCase()})[0];
   return ex||t;
 }
+
+function crCambiarEstadoArticulo(id,index,on){
+  if(RO||BUSY['cra_'+id])return;
+  var c=S.creditos.find(function(x){return x.id===id});if(!c)return;
+  var arts=crArticulosDe(c);if(!arts[index])return;
+  arts[index].enBodega=!!on;
+  var legacy=crActualizarEstadoLegacy(arts);
+  BUSY['cra_'+id]=true;
+  FS.doc(P+'creditos/'+id).update({articulos:arts,desc:legacy.desc,enBodega:legacy.enBodega,ubicacion:legacy.ubicacion})
+   .then(function(){BUSY['cra_'+id]=false;$('st').textContent='Estado del artículo actualizado';render()})
+   .catch(function(e){BUSY['cra_'+id]=false;$('st').textContent='Error al actualizar artículo: '+e.message;render()});
+}
+
 function toggleBodega(id,on){
   if(RO||BUSY['bd_'+id])return;
   BUSY['bd_'+id]=true;setTimeout(function(){BUSY['bd_'+id]=false},8000);
@@ -1339,21 +1353,79 @@ function deshacerEntrega(id){
   }).catch(function(e){BUSY['en_'+id]=false;$('st').textContent='Error al deshacer entrega: '+e.message;});
 }
 function crMsg(t,ok){var m=$('cr_msg');if(m){m.textContent=ok?t:'';m.style.color=''}$('st').textContent=ok?t:'';if(!ok)alert(t)}
+
+var crArticulosTemp = [];
+function crArticulosDe(c){
+  if(c && Array.isArray(c.articulos) && c.articulos.length) return c.articulos.map(function(a){
+    return {desc:String(a.desc||''),precio:Number(a.precio)||0,ubicacion:String(a.ubicacion||''),enBodega:!!a.enBodega};
+  });
+  if(c && String(c.desc||'').trim()) return [{desc:String(c.desc),precio:0,ubicacion:String(c.ubicacion||''),enBodega:!!c.enBodega}];
+  return [];
+}
+function crArticulosTexto(arts){
+  return (arts||[]).map(function(a){return String(a.desc||'').trim()}).filter(Boolean).join(', ');
+}
+function crTieneBodega(c){
+  var a=crArticulosDe(c);return a.some(function(x){return x.enBodega});
+}
+function crTodosBodega(c){
+  var a=crArticulosDe(c);return a.length>0&&a.every(function(x){return x.enBodega});
+}
+function crUbicaciones(c){
+  var a=crArticulosDe(c).map(function(x){return String(x.ubicacion||'').trim()}).filter(Boolean);
+  return Array.from(new Set(a));
+}
+function crTieneSinUbicacion(c){return crArticulosDe(c).some(function(a){return !String(a.ubicacion||'').trim()})}
+function crAgregarArticulo(){
+  crArticulosTemp.push({desc:'',precio:0,ubicacion:'',enBodega:false});
+  crRenderArticulos();
+}
+function crQuitarArticulo(i){crArticulosTemp.splice(i,1);crRenderArticulos()}
+function crUbicSelect(i,actual){
+  var l=ubicLista(),a=String(actual||'').trim();
+  return '<select style="margin:0" onchange="crUbicCambio('+i+',this)"><option value="">Sin ubicación</option>'+
+    l.map(function(u){return '<option value="'+esc(u)+'"'+(a.toLowerCase()===u.toLowerCase()?' selected':'')+'>'+esc(u)+'</option>'}).join('')+
+    '<option value="__otra__">➕ Otra ubicación…</option></select>'+
+    '<input id="cr_art_otra_'+i+'" placeholder="Nueva ubicación" style="display:none;margin:6px 0 0" oninput="crArticulosTemp['+i+'].ubicacion=this.value">';
+}
+function crUbicCambio(i,el){
+  var other=$('cr_art_otra_'+i);
+  if(el.value==='__otra__'){if(other){other.style.display='block';other.focus()}crArticulosTemp[i].ubicacion=''}
+  else{if(other)other.style.display='none';crArticulosTemp[i].ubicacion=el.value}
+}
+function crRenderArticulos(){
+  var box=$('cr_articulos_container');if(!box)return;
+  if(!crArticulosTemp.length){box.innerHTML='<p class="mu">Agrega al menos un artículo al apartado.</p>';return}
+  box.innerHTML=crArticulosTemp.map(function(a,i){
+    return '<div class="dash-panel" style="padding:10px;margin:0 0 8px;border-radius:11px">'
+      +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:7px"><b>Artículo '+(i+1)+'</b><button type="button" class="btn-sm bad" onclick="crQuitarArticulo('+i+')">Eliminar</button></div>'
+      +'<label class="fld-lbl">Descripción</label><input value="'+esc(a.desc)+'" placeholder="Nombre del artículo" oninput="crArticulosTemp['+i+'].desc=this.value">'
+      +'<label class="fld-lbl">Precio del artículo (₡)</label><input type="number" inputmode="decimal" step="0.01" min="0" value="'+(a.precio||'')+'" placeholder="0.00" oninput="crArticulosTemp['+i+'].precio=parseFloat(this.value)||0">'
+      +'<label class="fld-lbl">Ubicación</label>'+crUbicSelect(i,a.ubicacion)
+      +'<label class="chk" style="margin:8px 0 0"><input type="checkbox" '+(a.enBodega?'checked':'')+' onchange="crArticulosTemp['+i+'].enBodega=this.checked"> Ya está en bodega</label>'
+      +'</div>';
+  }).join('');
+}
+function crActualizarEstadoLegacy(arts){
+  return {desc:crArticulosTexto(arts),enBodega:arts.length>0&&arts.every(function(a){return !!a.enBodega}),
+    ubicacion:(function(){var u=arts.map(function(a){return String(a.ubicacion||'').trim()}).filter(Boolean);return u.length&&u.every(function(x){return x.toLowerCase()===u[0].toLowerCase()})?u[0]:''})()};
+}
+
 function saveCreditoItem(){
   if(BUSY.save) return;
   var num = $('cr_num').value.trim();
   var nombre = $('cr_nombre').value.trim();
   var tel = $('cr_tel').value.trim();
-  var desc = $('cr_desc').value.trim();
+  var arts = crArticulosTemp.map(function(a){return {desc:String(a.desc||'').trim(),precio:Math.max(0,Number(a.precio)||0),ubicacion:String(a.ubicacion||'').trim(),enBodega:!!a.enBodega};});
   var plazo = parseInt($('cr_plazo').value) || 0;
   var monto = parseFloat(String($('cr_monto').value).replace(',','.'));
   var pagado = parseFloat(String($('cr_pagado').value).replace(',','.')) || 0;
   var fecha = $('cr_fecha').value || today();
-  var enBodega = !!($('cr_bodega') && $('cr_bodega').checked);
-  var ubicacion = ubicLeer();
-  if($('cr_ubic').value === '__otra__' && !ubicacion){ crMsg('Escribe el nombre de la nueva ubicación'); return; }
+  var legacy = crActualizarEstadoLegacy(arts);
+  var desc = legacy.desc, enBodega = legacy.enBodega, ubicacion = legacy.ubicacion;
 
   if(!nombre || !(monto > 0)){ crMsg('Indica el nombre del cliente y un monto total válido'); return; }
+  if(!arts.length || arts.some(function(a){return !a.desc;})){crMsg('Agrega al menos un artículo y completa su descripción');return;}
   if(pagado < 0){ crMsg('El total abonado no puede ser negativo'); return; }
   if(pagado > monto + 0.005){
     if(edCrId){ crMsg('El total abonado (₡' + money(pagado) + ') no puede ser mayor que el monto total (₡' + money(monto) + ').'); return; }
@@ -1365,7 +1437,7 @@ function saveCreditoItem(){
   if(!edCrId && S.creditos.some(function(c){ return c.id === id; })) id = id + '-' + Date.now().toString(36);
   var prevCr = edCrId ? S.creditos.filter(function(c){ return c.id === edCrId; })[0] : null;
   var creditoObj = {
-    id: id, num: num, nombre: nombre, tel: tel, desc: desc, plazo: plazo,
+    id: id, num: num, nombre: nombre, tel: tel, desc: desc, articulos: arts, plazo: plazo,
     monto: Math.round(monto * 100) / 100, pagado: Math.round(pagado * 100) / 100, fecha: fecha,
     enBodega: enBodega, ubicacion: ubicacion,
     entregado: !!(prevCr && prevCr.entregado && Math.round(pagado*100) >= Math.round(monto*100)),
@@ -1402,13 +1474,13 @@ function saveCreditoItem(){
     setTimeout(function(){ BUSY.save = false; }, 8000);
     crMsg('Guardando…', true);
     bs.commit().then(function(){
-      BUSY.save = false;edCrId = null;render();
+      BUSY.save = false;edCrId = null;crArticulosTemp=[];render();
       crMsg(esNuevo ? 'Apartado guardado.' : 'Cambios guardados: abonos en Ventas y saldos actualizados.', true);
     }).catch(function(e){BUSY.save = false;crMsg('Error al guardar: ' + e.message);});
   }
 }
-function editCredito(id){edCrId = id;render();window.scrollTo({top:0, behavior:'smooth'});}
-function cancelEditCredito(){edCrId = null;render();}
+function editCredito(id){edCrId = id;crArticulosTemp=[];render();window.scrollTo({top:0, behavior:'smooth'});}
+function cancelEditCredito(){edCrId = null;crArticulosTemp=[];render();}
 function abonarCredito(id){
   if(BUSY[id]) return;
   var el = $('abono_' + id);
@@ -1472,7 +1544,7 @@ function reciboHTML(c){
   return '<div style="color:#000;background:#fff;font-family:Arial,sans-serif;max-width:7in;padding:24px;font-size:14px;line-height:1.4">'
     +'<div style="display:flex;align-items:center;gap:14px;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:12px"><img src="'+LOGO+'" alt="" style="width:70px;height:70px;border-radius:50%"><div><div style="font-size:22px;font-weight:bold">Little Nani</div><div>Recibo de apartado'+(c.num?' #'+esc(c.num):'')+'</div></div></div>'
     +'<div><b>Cliente:</b> '+esc(c.nombre)+(c.tel?' · Tel: '+esc(c.tel):'')+'</div>'
-    +'<div><b>Descripción:</b> '+esc(c.desc||'Apartado general')+'</div>'
+    +'<div><b>Artículos:</b>'+crArticulosDe(c).map(function(a){return '<div style="padding:3px 0">• '+esc(a.desc)+(a.precio?' — ₡'+money(a.precio):'')+' · '+(a.enBodega?'En bodega':'Pendiente de bodega')+' · '+esc(a.ubicacion||'Sin ubicación')+'</div>'}).join('')+'</div>'
     +'<div><b>Fecha de inicio:</b> '+shDot(c.fecha)+(lim?' · <b>Fecha límite:</b> '+shDot(lim):'')+'</div>'
     +'<table style="width:100%;min-width:0;border-collapse:collapse;margin:14px 0;font-size:14px"><thead><tr><th style="text-align:left;border-bottom:2px solid #000;padding:6px 4px;color:#000">Fecha del abono</th><th style="text-align:right;border-bottom:2px solid #000;padding:6px 4px;color:#000">Monto</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'<div style="text-align:right;font-size:15px"><div>Monto total: <b>₡'+money(c.monto)+'</b></div><div>Total abonado: <b>₡'+money(c.pagado)+'</b></div><div style="font-size:18px;margin-top:4px">Saldo pendiente: <b>₡'+money(pend)+'</b></div></div>'
@@ -1609,7 +1681,7 @@ function enviarReporteCliente(id){
   var diasPlazo = parseInt(c.plazo) || 0;
   var fechaLimite = diasPlazo > 0 ? addDays(c.fecha, diasPlazo) : '';
   var txt = '¡Hola ' + c.nombre + '! 👋 Le escribimos de *Little Nani* para compartirle el estado de su apartado' + (c.num ? ' #' + c.num : '') + ':\n\n'
-          + '📦 *Descripción:* ' + (c.desc || 'Apartado general') + '\n'
+          + '📦 *Artículos:*\n' + crArticulosDe(c).map(function(a){return '• '+a.desc+(a.precio?' — ₡'+money(a.precio):'')+' | '+(a.enBodega?'En bodega':'Pendiente de bodega')+' | '+(a.ubicacion||'Sin ubicación')}).join('\n') + '\n'
           + '📅 *Fecha de inicio:* ' + shDot(c.fecha) + '\n'
           + (fechaLimite ? '⏰ *Fecha límite:* ' + shDot(fechaLimite) + ' (' + diasPlazo + ' días de plazo)\n' : '')
           + abonosTxt(c)
@@ -1649,7 +1721,7 @@ function mensajeAtraso(c){
   var pend=Math.round((c.monto-c.pagado)*100)/100,lim=addDays(c.fecha,parseInt(c.plazo)||0);
   var dias=Math.round((new Date(today()+'T00:00')-new Date(lim+'T00:00'))/86400000);
   return '¡Hola '+c.nombre+'! 👋 Le escribimos de *Little Nani* para recordarle que el plazo de su apartado'+(c.num?' #'+c.num:'')+' venció el '+shDot(lim)+' (hace '+dias+(dias===1?' día':' días')+').\n\n'
-    +'📦 *Descripción:* '+(c.desc||'Apartado general')+'\n'
+    +'📦 *Artículos:*\n'+crArticulosDe(c).map(function(a){return '• '+a.desc+(a.precio?' — ₡'+money(a.precio):'')+' | '+(a.enBodega?'En bodega':'Pendiente de bodega')+' | '+(a.ubicacion||'Sin ubicación')}).join('\n')+'\n'
     +'💰 *Monto total:* ₡'+money(c.monto)+'\n'
     +'✅ *Abonado:* ₡'+money(c.pagado)+'\n'
     +'⏳ *Saldo pendiente:* ₡'+money(pend)+'\n\n'
@@ -1709,10 +1781,10 @@ function renderCreditosList(){
 
   var filtered = sortedCreditos.filter(function(c){
     if(CR_Atr && !crAtr(c)) return false;
-    if(CR_Bod && (c.enBodega || c.entregado)) return false;
+    if(CR_Bod && (crTodosBodega(c) || c.entregado)) return false;
     if(CR_Ubic === '__entregado__'){ if(!c.entregado) return false; }
-    else if(CR_Ubic === '__sin__'){ if(c.entregado || String(c.ubicacion||'').trim()) return false; }
-    else if(CR_Ubic && (c.entregado || String(c.ubicacion||'').trim().toLowerCase() !== CR_Ubic.toLowerCase())) return false;
+    else if(CR_Ubic === '__sin__'){ if(c.entregado || !crTieneSinUbicacion(c)) return false; }
+    else if(CR_Ubic && (c.entregado || crUbicaciones(c).every(function(u){return u.toLowerCase()!==CR_Ubic.toLowerCase()}))) return false;
     if(!CR_Q) return true;
     return c.nombre.toLowerCase().indexOf(CR_Q) >= 0 || (c.tel || '').toLowerCase().indexOf(CR_Q) >= 0 || (c.num || '').toLowerCase().indexOf(CR_Q) >= 0;
   });
@@ -1737,10 +1809,10 @@ function renderCreditosList(){
        + (c.num ? '<div class="mu" style="font-weight:700;font-size:11px;letter-spacing:.05em">APARTADO #' + esc(c.num) + '</div>' : '')
        + '<b style="font-size:16px">'+esc(c.nombre)+'</b> '+estado
        + '<div class="mu" style="margin-top:2px">Inicio: '+shDot(c.fecha)+(diasPlazo ? ' · Plazo: ' + diasPlazo + 'd (Vence: ' + shDot(fechaLimite) + ')' : '')+(c.tel?' · Tel: '+esc(c.tel):'')+'</div>'
-       + '<div style="font-size:13.5px;margin-top:4px">'+esc(c.desc||'Sin descripción')+'</div>'
+        + '<div style="font-size:13.5px;margin-top:6px"><b>Artículos:</b><div style="margin-top:3px">'+crArticulosDe(c).map(function(a,ai){return '<div style="padding:3px 0;border-bottom:1px solid var(--bd)">• '+esc(a.desc)+(a.precio?' · ₡'+money(a.precio):'')+'<div class="mu">📍 '+esc(a.ubicacion||'Sin ubicación')+' · ' +(a.enBodega?'✅ En bodega':'⏳ Pendiente de bodega')+(!c.entregado&&!RO?'<label class="chk" style="margin:3px 0 0"><input type="checkbox" '+(a.enBodega?'checked':'')+' onchange="crCambiarEstadoArticulo(\''+c.id+'\','+ai+',this.checked)"> Ya está en bodega</label>':'')+'</div></div>'}).join('')+'</div></div>'
        + (c.entregado
           ? '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="bd ok" style="margin-left:0">✅ Entregado'+(c.fechaEntrega?' el '+shDot(c.fechaEntrega):'')+'</span><button class="btn-sm" onclick="deshacerEntrega(\''+c.id+'\')">↩️ Deshacer</button></div>'
-          : '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><label class="chk" style="margin:0"><input type="checkbox" '+(c.enBodega?'checked ':'')+'onchange="toggleBodega(\''+c.id+'\',this.checked)"> En bodega</label>'+(c.ubicacion?'<span class="bd" style="margin-left:0">📍 '+esc(c.ubicacion)+'</span>':'')+'</div>')
+           : '<div style="margin-top:6px" class="mu">Estado y ubicación gestionados individualmente por artículo</div>')
        + '</div><div style="display:flex;gap:5px"><button class="btn-sm" onclick="editCredito(\''+c.id+'\')">Editar</button><button class="btn-sm bad" onclick="eliminarCredito(\''+c.id+'\')">✕</button></div></div>'
        + '<div class="prog-wrap" style="margin-top:10px"><div class="prog-head"><span>Avance de pago ('+pctPagado+'%)</span><span>Resta: <b class="'+(pendiente>0?'neg':'pos')+'">₡'+money(pendiente)+'</b></span></div>'
        + '<div class="prog-track"><div class="prog-fill '+(pendiente<=0?'':'ac')+'" style="width:'+pctPagado+'%"></div></div></div>'
@@ -1775,8 +1847,11 @@ function creditosSection(){
   var pctRecuperado = totalDeuda > 0 ? Math.round((totalPagado / totalDeuda) * 100) : 0;
   var at = atrasados(), tv = at.reduce(function(a,c){return a+Math.max(0,c.monto-c.pagado)},0);
   var edObj = edCrId ? S.creditos.find(function(c){ return c.id === edCrId; }) : null;
-  var pendBod = S.creditos.filter(function(c){ return !c.enBodega && !c.entregado; }).length;
-  var nEnBod = S.creditos.filter(function(c){ return c.enBodega && !c.entregado; }).length;
+  if(edObj && !crArticulosTemp.length) crArticulosTemp=crArticulosDe(edObj);
+  if(!edObj && !crArticulosTemp.length) crArticulosTemp=[{desc:'',precio:0,ubicacion:'',enBodega:false}];
+  if(!edObj && crArticulosTemp.length && edCrId) crArticulosTemp=[];
+  var pendBod = S.creditos.filter(function(c){ return !crTodosBodega(c) && !c.entregado; }).length;
+  var nEnBod = S.creditos.filter(function(c){ return crTieneBodega(c) && !c.entregado; }).length;
   var nEntreg = S.creditos.filter(function(c){ return c.entregado; }).length;
   var nEntregMes = S.creditos.filter(function(c){ return c.entregado && String(c.fechaEntrega||'').slice(0,7) === today().slice(0,7); }).length;
 
@@ -1808,7 +1883,7 @@ function creditosSection(){
         + '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
         + '<label class="chk" style="margin:0;flex:1;min-width:170px"><input type="checkbox" '+(CR_Bod?'checked':'')+' onchange="toggleSoloPendBodega(this)"> Solo pendientes de bodega ('+pendBod+')</label>'
         + '<select id="cr_filtro_ubic" onchange="filtrarUbic(this)" style="margin:0;flex:1;min-width:170px"><option value="">📍 Todas las ubicaciones</option><option value="__sin__"'+(CR_Ubic==='__sin__'?' selected':'')+'>Sin ubicación</option><option value="__entregado__"'+(CR_Ubic==='__entregado__'?' selected':'')+'>✅ Entregados ('+nEntreg+')</option>'
-        + ubicLista().map(function(u){ return '<option value="'+esc(u)+'"'+(CR_Ubic&&CR_Ubic!=='__sin__'&&CR_Ubic!=='__entregado__'&&u.toLowerCase()===CR_Ubic.toLowerCase()?' selected':'')+'>'+esc(u)+' ('+S.creditos.filter(function(c){return !c.entregado && String(c.ubicacion||'').trim().toLowerCase()===u.toLowerCase()}).length+')</option>'; }).join('')
+        + ubicLista().map(function(u){ return '<option value="'+esc(u)+'"'+(CR_Ubic&&CR_Ubic!=='__sin__'&&CR_Ubic!=='__entregado__'&&u.toLowerCase()===CR_Ubic.toLowerCase()?' selected':'')+'>'+esc(u)+' ('+S.creditos.filter(function(c){return !c.entregado && crUbicaciones(c).some(function(x){return x.toLowerCase()===u.toLowerCase()})}).length+')</option>'; }).join('')
         + '</select>'
         + '</div></div><div id="rm_panel">'+panelRM()+'</div>'
         + '<h2>'+(edObj ? 'Editar apartado' : 'Registrar nuevo apartado')+'</h2>'
@@ -1822,9 +1897,8 @@ function creditosSection(){
         + '<div><label class="fld-lbl">Teléfono</label><input id="cr_tel" placeholder="8888-8888" inputmode="tel" value="'+(edObj ? esc(edObj.tel||'') : '')+'"></div>'
         + '<div><label class="fld-lbl">Fecha de inicio</label><input type="date" id="cr_fecha" value="'+(edObj ? edObj.fecha : today())+'"></div>'
         + '</div>'
-        + '<label class="fld-lbl">Descripción de artículos</label><input id="cr_desc" placeholder="Detalle del pedido..." value="'+(edObj ? esc(edObj.desc||'') : '')+'">'
-        + '<label class="chk"><input type="checkbox" id="cr_bodega" '+(edObj && edObj.enBodega ? 'checked' : '')+'> Ya está en bodega</label>'
-        + '<label class="fld-lbl">Ubicación</label>'+ubicSelect(edObj ? edObj.ubicacion : '')
+        + '<label class="fld-lbl">Artículos del apartado</label><div id="cr_articulos_container"></div>'
+        + '<button type="button" class="pri sec" style="margin-bottom:10px" onclick="crAgregarArticulo()">+ Agregar artículo</button>'
         + '<div class="row">'
         + '<div><label class="fld-lbl">Monto total</label><input id="cr_monto" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="'+(edObj ? edObj.monto : '')+'"></div>'
         + '<div><label class="fld-lbl">'+(edObj ? 'Total abonado' : 'Abono inicial')+'</label><input id="cr_pagado" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="'+(edObj ? esc(edObj.pagado||''):'')+'"></div>'
@@ -1842,6 +1916,7 @@ function creditosSection(){
         + '<button class="pri bad" onclick="deleteAllCreditos()">🗑️ Borrar Todos</button>'
         + '</div></div>';
 
+  setTimeout(crRenderArticulos,0);
   return h;
 }
 
@@ -3087,16 +3162,16 @@ function ctConvertirApartado(id){
   if(c.estado==='convertida'&&!confirm('Esta cotización ya fue convertida. ¿Crear un apartado de todos modos?'))return;
   var maxN=0;S.creditos.forEach(function(x){var n=parseInt(String(x.num||'').replace(/\D/g, ''))||0;if(n>maxN)maxN=n});
   var num=(maxN+1).toString();
-  var desc=(c.articulos||[]).map(function(a){return a.desc}).join(', ')+(c.envio?' + envío':'');
+  var arts=(c.articulos||[]).map(function(a){return {desc:a.desc,precio:Number(a.precio)||0,ubicacion:'',enBodega:false}});var desc=crArticulosTexto(arts)+(c.envio?' + envío':'');
   var cid='cr-'+hs(num+'|'+c.nombre.toLowerCase()+'|'+today());
   if(S.creditos.some(function(x){return x.id===cid}))cid=cid+'-'+Date.now().toString(36);
-  var crObj={id:cid,num:num,nombre:c.nombre,tel:c.tel||'',desc:desc,plazo:30,monto:c.total,pagado:0,fecha:today()};
+  var crObj={id:cid,num:num,nombre:c.nombre,tel:c.tel||'',desc:desc,articulos:arts,plazo:30,monto:c.total,pagado:0,fecha:today(),enBodega:false,ubicacion:''};
   var b=FS.batch();
   b.set(FS.doc(P+'creditos/'+cid),crObj);
   b.set(FS.doc(P+'cotizaciones/'+id),{estado:'convertida',apartadoId:cid},{merge:true});
   BUSY['cta_'+id]=true;setTimeout(function(){BUSY['cta_'+id]=false},8000);
   b.commit().then(function(){
-    BUSY['cta_'+id]=false;edCrId=cid;tab='cr';$('st').textContent='Apartado #'+num+' creado desde cotización.';render();
+    BUSY['cta_'+id]=false;edCrId=cid;crArticulosTemp=arts;tab='cr';$('st').textContent='Apartado #'+num+' creado desde cotización.';render();
   }).catch(function(e){BUSY['cta_'+id]=false;$('st').textContent='Error: '+e.message});
 }
 function cotizacionesList(){
